@@ -1,105 +1,296 @@
 <!DOCTYPE html>
 <html>
+
 <head>
   <base target="_top">
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    body { font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif; }
+    body {
+      font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+    }
   </style>
 </head>
+
 <body class="bg-slate-50 min-h-screen text-slate-800">
 
+  <!-- 全域載入遮罩 -->
+  <div id="loading-overlay" class="fixed inset-0 bg-slate-50 z-50 flex flex-col items-center justify-center transition-opacity duration-300">
+    <div class="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent mb-4"></div>
+    <div class="text-slate-600 font-medium tracking-wide">正在驗證您的身分與權限，請稍候...</div>
+  </div>
+
   <nav class="bg-slate-900 text-white shadow-md">
-    <div class="max-w-7xl mx-auto px-4 flex justify-between items-center h-16">
+    <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row justify-between items-center py-3 sm:h-16 gap-3">
       <div class="font-bold text-lg tracking-wider">自然科課程藥品/物品管理系統</div>
       <div class="flex space-x-2">
-        <button id="btn-user" onclick="switchView('user')" class="px-4 py-2 rounded-md bg-blue-600 text-white font-medium shadow-sm hover:bg-blue-700 transition">
-          使用者申請
+        <button id="btn-apply" onclick="switchView('apply')"
+          class="px-3.5 py-1.5 rounded-md bg-blue-600 text-white font-medium shadow-sm hover:bg-blue-700 transition text-sm">
+          請購申請
         </button>
-        <button id="btn-admin" onclick="switchView('admin')" class="px-4 py-2 rounded-md bg-slate-800 text-slate-300 font-medium hover:bg-slate-700 transition">
+        <button id="btn-user-list" onclick="switchView('user-list')"
+          class="px-3.5 py-1.5 rounded-md bg-slate-800 text-slate-300 font-medium hover:bg-slate-700 transition text-sm hidden">
+          申請清單
+        </button>
+        <button id="btn-admin" onclick="switchView('admin')"
+          class="px-3.5 py-1.5 rounded-md bg-slate-800 text-slate-300 font-medium hover:bg-slate-700 transition text-sm hidden">
           管理者後台
         </button>
+        <a id="btn-login-logout" href="#"
+          class="px-3.5 py-1.5 rounded-md bg-slate-200 text-slate-800 font-medium shadow-sm hover:bg-slate-300 transition text-sm ml-2">
+          登入
+        </a>
       </div>
     </div>
   </nav>
 
   <main class="max-w-7xl mx-auto px-4 py-8">
-    
-    <div id="view-user" class="block max-w-2xl mx-auto bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+
+    <!-- 1. 請購表單頁面 -->
+    <div id="view-apply" class="block max-w-2xl mx-auto bg-white rounded-xl shadow-sm border border-slate-200 p-6">
       <h2 class="text-xl font-bold text-slate-900 mb-6 border-b pb-3">課程化學藥品 / 物品申請表單</h2>
-      
+
+      <!-- 未登入或無權限提示橫幅 -->
+      <div id="login-warning"
+        class="mb-6 p-4 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 flex items-start space-x-3 hidden">
+        <svg class="h-5 w-5 text-amber-500 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24"
+          stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        </svg>
+        <div>
+          <h4 class="font-bold text-amber-900" id="login-warning-title">提示：需登入後才能送出請購</h4>
+          <p class="text-sm mt-1" id="login-warning-desc">目前為唯讀瀏覽狀態。您必須登入學校 @fhsh.khc.edu.tw 帳號後才能填寫並送出請購申請。</p>
+        </div>
+      </div>
+
       <form id="appForm" onsubmit="handleFormSubmit(event)" class="space-y-5">
-        
         <div>
           <label class="block text-sm font-semibold text-slate-700 mb-1">申請人電子郵件地址</label>
-          <input type="email" id="email" name="email" required readonly class="w-full rounded-md border-slate-300 bg-slate-100 px-3 py-2 text-slate-600 border focus:outline-none">
+          <input type="email" id="email" name="email" required readonly
+            class="w-full rounded-md border-slate-300 bg-slate-100 px-3 py-2 text-slate-600 border focus:outline-none">
         </div>
 
         <div>
-          <label class="block text-sm font-semibold text-slate-700 mb-1">物品/藥品中文名稱 <span class="text-red-500">*</span></label>
-          <input type="text" id="chineseName" name="chineseName" required class="w-full rounded-md border-slate-300 px-3 py-2 border focus:ring-2 focus:ring-blue-500 focus:outline-none">
+          <label class="block text-sm font-semibold text-slate-700 mb-1">物品/藥品中文名稱 <span
+              class="text-red-500">*</span></label>
+          <input type="text" id="chineseName" name="chineseName" required
+            class="w-full rounded-md border-slate-300 px-3 py-2 border focus:ring-2 focus:ring-blue-500 focus:outline-none">
         </div>
 
         <div>
-          <label class="block text-sm font-semibold text-slate-700 mb-1">藥品英文名稱 (含化學式、分子量) 或物品規格名稱 <span class="text-red-500">*</span></label>
-          <input type="text" id="englishName" name="englishName" required class="w-full rounded-md border-slate-300 px-3 py-2 border focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="例如：Copper(II) sulfate CuSO4, MW: 159.6">
+          <label class="block text-sm font-semibold text-slate-700 mb-1">藥品英文名稱 (含化學式、分子量) 或物品規格名稱 <span
+              class="text-red-500">*</span></label>
+          <input type="text" id="englishName" name="englishName" required
+            class="w-full rounded-md border-slate-300 px-3 py-2 border focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            placeholder="例如：Copper(II) sulfate CuSO4, MW: 159.6">
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label class="block text-sm font-semibold text-slate-700 mb-1">所需數量 <span class="text-red-500">*</span></label>
-            <input type="number" id="quantity" name="quantity" min="1" required class="w-full rounded-md border-slate-300 px-3 py-2 border focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            <label class="block text-sm font-semibold text-slate-700 mb-1">所需數量 <span
+                class="text-red-500">*</span></label>
+            <input type="number" id="quantity" name="quantity" min="1" required
+              class="w-full rounded-md border-slate-300 px-3 py-2 border focus:ring-2 focus:ring-blue-500 focus:outline-none">
           </div>
           <div>
-            <label class="block text-sm font-semibold text-slate-700 mb-1">物品分類/化學藥品狀態 <span class="text-red-500">*</span></label>
-            <select id="category" name="category" required onchange="toggleConcentration()" class="w-full rounded-md border-slate-300 px-3 py-2 border bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none">
-              <option value="固態藥品">固態藥品</option>
+            <label class="block text-sm font-semibold text-slate-700 mb-1">物品分類/化學藥品狀態 <span
+                class="text-red-500">*</span></label>
+            <select id="category" name="category" required onchange="toggleConcentration()"
+              class="w-full rounded-md border-slate-300 px-3 py-2 border bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none">
+
+              <option value="固態藥品">固態(粉)</option>
+              <option value="固態藥品">固態(顆粒)</option>
               <option value="液態藥品">液態藥品</option>
-              <option value="一般物品">一般物品</option>
-              <option value="玻璃器材">玻璃器材</option>
+              <option value="肉類內臟">肉類內臟</option>
+              <option value="蔬菜水果">蔬菜水果</option>
+              <option value="活體">活體(如青蛙)</option>
+              <option value="實驗器材">實驗器材(耗材,如塑膠滴管、玻片、試管、量筒等)</option>
             </select>
           </div>
         </div>
 
         <div id="concentration-block" class="hidden">
-          <label class="block text-sm font-semibold text-slate-700 mb-1">藥品濃度 (液態) <span class="text-red-500">*</span></label>
-          <input type="text" id="concentration" name="concentration" class="w-full rounded-md border-slate-300 px-3 py-2 border focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="例如：12 M 或 35%">
+          <label class="block text-sm font-semibold text-slate-700 mb-1">藥品濃度 (液態) <span
+              class="text-red-500">*</span></label>
+          <input type="text" id="concentration" name="concentration"
+            class="w-full rounded-md border-slate-300 px-3 py-2 border focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            placeholder="例如：12 M 或 35%">
         </div>
 
         <div>
-          <label class="block text-sm font-semibold text-slate-700 mb-1">課程使用時間 <span class="text-red-500">*</span></label>
-          <input type="datetime-local" id="usageTime" name="usageTime" required class="w-full rounded-md border-slate-300 px-3 py-2 border focus:ring-2 focus:ring-blue-500 focus:outline-none">
+          <label class="block text-sm font-semibold text-slate-700 mb-1">課程使用時間 <span
+              class="text-red-500">*</span></label>
+          <input type="datetime-local" id="usageTime" name="usageTime" required
+            class="w-full rounded-md border-slate-300 px-3 py-2 border focus:ring-2 focus:ring-blue-500 focus:outline-none">
         </div>
 
         <div>
-          <label class="block text-sm font-semibold text-slate-700 mb-1">請勾選所需科別 <span class="text-red-500">*</span></label>
+          <label class="block text-sm font-semibold text-slate-700 mb-1">請勾選所需科別 <span
+              class="text-red-500">*</span></label>
           <div class="flex space-x-4 mt-2">
-            <label class="inline-flex items-center"><input type="radio" name="subject" value="物理" checked class="text-blue-600 focus:ring-blue-500"><span class="ml-2">物理</span></label>
-            <label class="inline-flex items-center"><input type="radio" name="subject" value="化學" class="text-blue-600 focus:ring-blue-500"><span class="ml-2">化學</span></label>
-            <label class="inline-flex items-center"><input type="radio" name="subject" value="生物" class="text-blue-600 focus:ring-blue-500"><span class="ml-2">生物</span></label>
-            <label class="inline-flex items-center"><input type="radio" name="subject" value="地科" class="text-blue-600 focus:ring-blue-500"><span class="ml-2">地科</span></label>
+            <label class="inline-flex items-center"><input type="radio" name="subject" value="物理" checked
+                class="text-blue-600 focus:ring-blue-500"><span class="ml-2">物理</span></label>
+            <label class="inline-flex items-center"><input type="radio" name="subject" value="化學"
+                class="text-blue-600 focus:ring-blue-500"><span class="ml-2">化學</span></label>
+            <label class="inline-flex items-center"><input type="radio" name="subject" value="生物"
+                class="text-blue-600 focus:ring-blue-500"><span class="ml-2">生物</span></label>
+            <label class="inline-flex items-center"><input type="radio" name="subject" value="地科"
+                class="text-blue-600 focus:ring-blue-500"><span class="ml-2">地科</span></label>
+            <label class="inline-flex items-center"><input type="radio" name="subject" value="自然科探究實作課程"
+                class="text-blue-600 focus:ring-blue-500"><span class="ml-2">自然科探究實作課程</span></label>
+            <label class="inline-flex items-center"><input type="radio" name="subject" value="自然科四科專題課程"
+                class="text-blue-600 focus:ring-blue-500"><span class="ml-2">自然科四科專題課程</span></label>
           </div>
         </div>
 
         <div>
           <label class="block text-sm font-semibold text-slate-700 mb-1">物品/藥品照片</label>
-          <input type="file" id="photoFile" accept="image/*" class="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+          <div id="paste-zone" tabindex="0"
+            class="w-full border-2 border-dashed border-slate-300 rounded-lg p-6 text-center focus:outline-none focus:border-blue-500 hover:bg-slate-50 transition">
+            <div id="upload-prompt">
+              <svg class="mx-auto h-8 w-8 text-slate-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              <p class="text-sm text-slate-600 mb-1">點擊選擇照片，或在此處 <kbd
+                  class="px-1 py-0.5 border rounded bg-slate-100 text-xs text-slate-600 font-mono">Ctrl+V</kbd> 貼上圖片</p>
+              <input type="file" id="photoFile" accept="image/*" class="hidden">
+              <button type="button" onclick="document.getElementById('photoFile').click()"
+                class="mt-2 px-4 py-1.5 bg-slate-200 hover:bg-slate-300 rounded-md text-sm text-slate-700 font-medium transition">選擇檔案</button>
+            </div>
+
+            <div id="preview-container" class="hidden relative inline-block mt-2">
+              <img id="image-preview" src="" alt="圖片預覽"
+                class="max-h-48 rounded shadow-sm border border-slate-200 object-contain">
+              <button type="button" id="btn-remove-image" onclick="removeImage(event)"
+                class="absolute -top-2 -right-2 bg-rose-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-rose-600 shadow-md">✕</button>
+              <p id="image-filename" class="text-xs text-slate-500 mt-2 truncate max-w-xs"></p>
+            </div>
+          </div>
         </div>
 
         <div class="pt-2">
-          <button type="submit" id="submitBtn" class="w-full py-2.5 rounded-md bg-blue-600 text-white font-semibold hover:bg-blue-700 focus:ring-4 focus:ring-blue-200 transition shadow-sm">
+          <button type="submit" id="submitBtn"
+            class="w-full py-2.5 rounded-md bg-blue-600 text-white font-semibold hover:bg-blue-700 focus:ring-4 focus:ring-blue-200 transition shadow-sm">
             提交申請
           </button>
         </div>
       </form>
     </div>
 
+    <!-- 2. 個人申請紀錄清單頁面 -->
+    <div id="view-user-list" class="hidden bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+      <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b pb-3">
+        <h2 class="text-xl font-bold text-slate-900">個人申請紀錄清單</h2>
+        <div class="flex flex-wrap items-center gap-3">
+          <!-- 過濾器 -->
+          <div class="flex items-center space-x-2 text-sm">
+            <span class="text-slate-500 font-medium">篩選：</span>
+            <select id="user-filter-year" onchange="applyUserFilters()"
+              class="rounded border border-slate-300 p-1.5 text-xs bg-white focus:outline-none">
+              <option value="">全部年份</option>
+            </select>
+            <select id="user-filter-month" onchange="applyUserFilters()"
+              class="rounded border border-slate-300 p-1.5 text-xs bg-white focus:outline-none">
+              <option value="">全部月份</option>
+              <option value="01">1 月</option>
+              <option value="02">2 月</option>
+              <option value="03">3 月</option>
+              <option value="04">4 月</option>
+              <option value="05">5 月</option>
+              <option value="06">6 月</option>
+              <option value="07">7 月</option>
+              <option value="08">8 月</option>
+              <option value="09">9 月</option>
+              <option value="10">10 月</option>
+              <option value="11">11 月</option>
+              <option value="12">12 月</option>
+            </select>
+          </div>
+          <!-- 重新整理 -->
+          <button onclick="loadUserData()"
+            class="px-3 py-1.5 bg-slate-100 text-slate-700 rounded border hover:bg-slate-200 text-sm font-medium transition">
+            重新整理
+          </button>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse text-sm">
+          <thead>
+            <tr class="bg-slate-100 border-b border-slate-200 text-slate-700 font-semibold">
+              <th class="p-3">時間戳記</th>
+              <th class="p-3">科別</th>
+              <th class="p-3">中文名稱</th>
+              <th class="p-3">規格/英文名稱</th>
+              <th class="p-3 w-16 text-center">數量</th>
+              <th class="p-3 text-center">分類</th>
+              <th class="p-3 text-center">照片</th>
+              <th class="p-3 text-center">是否請購</th>
+            </tr>
+          </thead>
+          <tbody id="userTableBody" class="divide-y divide-slate-100 text-slate-600">
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 分頁控制 -->
+      <div
+        class="flex flex-col sm:flex-row justify-between items-center mt-6 pt-4 border-t border-slate-100 gap-4 text-sm text-slate-600">
+        <div class="flex items-center space-x-2">
+          <span>每頁顯示</span>
+          <select id="user-page-size" onchange="changeUserPageSize(this.value)"
+            class="rounded border p-1 text-xs bg-white focus:outline-none">
+            <option value="10">10 筆</option>
+            <option value="20">20 筆</option>
+            <option value="30">30 筆</option>
+          </select>
+        </div>
+        <div class="flex items-center space-x-4">
+          <button id="btn-user-prev" onclick="prevUserPage()"
+            class="px-3 py-1 bg-slate-100 border hover:bg-slate-200 rounded disabled:opacity-50 disabled:cursor-not-allowed">上一頁</button>
+          <span id="user-page-info" class="font-medium">第 1 / 1 頁</span>
+          <button id="btn-user-next" onclick="nextUserPage()"
+            class="px-3 py-1 bg-slate-100 border hover:bg-slate-200 rounded disabled:opacity-50 disabled:cursor-not-allowed">下一頁</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. 管理者審核後台頁面 -->
     <div id="view-admin" class="hidden bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-      <div class="flex justify-between items-center mb-6 border-b pb-3">
-        <h2 class="text-xl font-bold text-slate-900">採購與申請管理審核面版</h2>
-        <button onclick="loadAdminData()" class="px-3 py-1.5 bg-slate-100 text-slate-700 rounded border hover:bg-slate-200 text-sm font-medium">
-          重新整理資料
-        </button>
+      <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b pb-3">
+        <h2 class="text-xl font-bold text-slate-900">採購與申請管理審核面板</h2>
+        <div class="flex flex-wrap items-center gap-3">
+          <!-- 過濾器 -->
+          <div class="flex items-center space-x-2 text-sm">
+            <span class="text-slate-500 font-medium">篩選：</span>
+            <select id="admin-filter-year" onchange="applyAdminFilters()"
+              class="rounded border border-slate-300 p-1.5 text-xs bg-white focus:outline-none">
+              <option value="">全部年份</option>
+            </select>
+            <select id="admin-filter-month" onchange="applyAdminFilters()"
+              class="rounded border border-slate-300 p-1.5 text-xs bg-white focus:outline-none">
+              <option value="">全部月份</option>
+              <option value="01">1 月</option>
+              <option value="02">2 月</option>
+              <option value="03">3 月</option>
+              <option value="04">4 月</option>
+              <option value="05">5 月</option>
+              <option value="06">6 月</option>
+              <option value="07">7 月</option>
+              <option value="08">8 月</option>
+              <option value="09">9 月</option>
+              <option value="10">10 月</option>
+              <option value="11">11 月</option>
+              <option value="12">12 月</option>
+            </select>
+          </div>
+          <!-- 重新整理 -->
+          <button onclick="loadAdminData()"
+            class="px-3 py-1.5 bg-slate-100 text-slate-700 rounded border hover:bg-slate-200 text-sm font-medium transition">
+            重新整理資料
+          </button>
+        </div>
       </div>
 
       <div class="overflow-x-auto">
@@ -118,40 +309,214 @@
             </tr>
           </thead>
           <tbody id="adminTableBody" class="divide-y divide-slate-100 text-slate-600">
-            </tbody>
+          </tbody>
         </table>
+      </div>
+
+      <!-- 分頁控制 -->
+      <div
+        class="flex flex-col sm:flex-row justify-between items-center mt-6 pt-4 border-t border-slate-100 gap-4 text-sm text-slate-600">
+        <div class="flex items-center space-x-2">
+          <span>每頁顯示</span>
+          <select id="admin-page-size" onchange="changeAdminPageSize(this.value)"
+            class="rounded border p-1 text-xs bg-white focus:outline-none">
+            <option value="10">10 筆</option>
+            <option value="20">20 筆</option>
+            <option value="30">30 筆</option>
+          </select>
+        </div>
+        <div class="flex items-center space-x-4">
+          <button id="btn-admin-prev" onclick="prevAdminPage()"
+            class="px-3 py-1 bg-slate-100 border hover:bg-slate-200 rounded disabled:opacity-50 disabled:cursor-not-allowed">上一頁</button>
+          <span id="admin-page-info" class="font-medium">第 1 / 1 頁</span>
+          <button id="btn-admin-next" onclick="nextAdminPage()"
+            class="px-3 py-1 bg-slate-100 border hover:bg-slate-200 rounded disabled:opacity-50 disabled:cursor-not-allowed">下一頁</button>
+        </div>
       </div>
     </div>
 
   </main>
 
   <script>
-    // 初始化設定
-    window.onload = function() {
-      // 載入當前使用者 Email
-      google.script.run.withSuccessHandler(function(email) {
-        document.getElementById('email').value = email || '無法取得帳號';
-      }).getCurrentUserEmail();
-    };
+    // 全域權限狀態
+    let currentUserEmail = '';
+    const adminEmails = ['5501@fhsh.khc.edu.tw', '5502@fhsh.khc.edu.tw'];
 
-    // 切換使用者與管理者畫面
+    // 使用者清單全域狀態
+    let rawUserData = [];
+    let filteredUserData = [];
+    let userCurrentPage = 1;
+    let userPageSize = 10;
+
+    // 管理者後台全域狀態
+    let rawAdminData = [];
+    let filteredAdminData = [];
+    let adminCurrentPage = 1;
+    let adminPageSize = 10;
+
+    // 取得或產生唯一的 Client Session ID，解決多使用者並發時的憑證覆蓋問題
+    let clientSessionId = localStorage.getItem('appSessionId');
+    if (!clientSessionId) {
+      clientSessionId = 'sess_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
+      localStorage.setItem('appSessionId', clientSessionId);
+    }
+
+    // 初始化設定：提早發送請求，不等待 onload，加速驗證流程
+    google.script.run
+      .withSuccessHandler(function (status) {
+        setupUI(status);
+        hideLoadingOverlay();
+      })
+      .withFailureHandler(function (err) {
+        setupUI({ loggedIn: false, role: 'guest', loginUrl: '' });
+        document.getElementById('email').value = '無法載入權限資訊';
+        hideLoadingOverlay();
+      })
+      .getAuthStatus(clientSessionId);
+
+    function hideLoadingOverlay() {
+      const overlay = document.getElementById('loading-overlay');
+      if (overlay) {
+        overlay.classList.add('opacity-0');
+        setTimeout(() => overlay.classList.add('hidden'), 300);
+      }
+    }
+
+    function handleLogout() {
+      document.getElementById('btn-login-logout').innerText = '登出中...';
+      google.script.run.withSuccessHandler(function () {
+        // 後端登出成功後，不依賴容易被阻擋的網頁跳轉，直接在原頁面無縫重新拉取未登入狀態並更新畫面
+        google.script.run.withSuccessHandler(function(status) {
+          setupUI(status);
+        }).getAuthStatus(clientSessionId);
+      }).logoutOAuth(clientSessionId);
+    }
+
+    // 依據 AuthStatus 調整畫面權限
+    function setupUI(status) {
+      const loginWarning = document.getElementById('login-warning');
+      const submitBtn = document.getElementById('submitBtn');
+      const btnUserList = document.getElementById('btn-user-list');
+      const btnAdmin = document.getElementById('btn-admin');
+      const btnAuth = document.getElementById('btn-login-logout');
+
+      const formFields = document.querySelectorAll('#appForm input:not(#email), #appForm select, #appForm button:not(#submitBtn)');
+
+      if (status.loggedIn) {
+        currentUserEmail = status.email;
+        document.getElementById('email').value = currentUserEmail;
+
+        // 設定登出按鈕
+        btnAuth.innerText = '登出 (' + currentUserEmail.split('@')[0] + ')';
+        btnAuth.href = "#";
+        btnAuth.onclick = function (e) { e.preventDefault(); handleLogout(); };
+        btnAuth.classList.remove('bg-slate-200', 'text-slate-800');
+        btnAuth.classList.add('bg-rose-100', 'text-rose-800', 'hover:bg-rose-200');
+
+        if (status.role === 'invalid') {
+          // 已登入但非學校網域
+          loginWarning.classList.remove('hidden');
+          document.getElementById('login-warning-title').innerText = '無效的帳號網域';
+          document.getElementById('login-warning-desc').innerText = '您目前登入的是 ' + currentUserEmail + '。請點擊右上方的「登出」並重新使用 @fhsh.khc.edu.tw 帳號登入。';
+
+          submitBtn.disabled = true;
+          submitBtn.innerText = '需使用學校帳號才能請購';
+          submitBtn.className = "w-full py-2.5 rounded-md bg-slate-400 text-slate-200 font-semibold cursor-not-allowed transition shadow-sm";
+          btnUserList.classList.add('hidden');
+          btnAdmin.classList.add('hidden');
+          switchView('apply');
+        } else {
+          // 成功登入且為合法網域 (user 或 admin)
+          loginWarning.classList.add('hidden');
+          submitBtn.disabled = false;
+          submitBtn.innerText = '提交申請';
+          submitBtn.className = "w-full py-2.5 rounded-md bg-blue-600 text-white font-semibold hover:bg-blue-700 focus:ring-4 focus:ring-blue-200 transition shadow-sm";
+
+          formFields.forEach(field => field.removeAttribute('disabled'));
+          btnUserList.classList.remove('hidden');
+
+          if (status.role === 'admin') {
+            btnAdmin.classList.remove('hidden');
+          } else {
+            btnAdmin.classList.add('hidden');
+          }
+        }
+      } else {
+        // 未登入：因瀏覽器安全性限制無法自動跳轉，需由使用者點擊按鈕觸發
+        currentUserEmail = '';
+        document.getElementById('email').value = '尚未登入';
+        
+        btnAuth.innerText = '登入';
+        btnAuth.href = status.loginUrl || '#';
+        btnAuth.onclick = null;
+        btnAuth.classList.add('bg-slate-200', 'text-slate-800');
+        btnAuth.classList.remove('bg-rose-100', 'text-rose-800', 'hover:bg-rose-200');
+
+        // 每 8 分鐘自動更新登入網址，避免 state token 過期 (時效為 10 分鐘)
+        if (!window.loginUrlInterval) {
+          window.loginUrlInterval = setInterval(function() {
+            google.script.run.withSuccessHandler(function(url) {
+              if (document.getElementById('btn-login-logout').innerText === '登入') {
+                document.getElementById('btn-login-logout').href = url;
+              }
+            }).getLoginUrl(clientSessionId);
+          }, 8 * 60 * 1000);
+        }
+
+        loginWarning.classList.remove('hidden');
+        document.getElementById('login-warning-title').innerText = '提示：需登入後才能送出請購';
+        document.getElementById('login-warning-desc').innerText = '目前為唯讀瀏覽狀態。您必須點擊右上方的「登入」按鈕，並使用學校 @fhsh.khc.edu.tw 帳號後才能填寫並送出請購申請。';
+        
+        submitBtn.disabled = true;
+        submitBtn.innerText = '需登入後才能送出請購';
+        submitBtn.className = "w-full py-2.5 rounded-md bg-slate-400 text-slate-200 font-semibold cursor-not-allowed transition shadow-sm";
+
+        btnUserList.classList.add('hidden');
+        btnAdmin.classList.add('hidden');
+        switchView('apply');
+      }
+    }
+
+    // 切換三大畫面
     function switchView(view) {
-      const viewUser = document.getElementById('view-user');
+      const viewApply = document.getElementById('view-apply');
+      const viewUserList = document.getElementById('view-user-list');
       const viewAdmin = document.getElementById('view-admin');
-      const btnUser = document.getElementById('btn-user');
+
+      const btnApply = document.getElementById('btn-apply');
+      const btnUserList = document.getElementById('btn-user-list');
       const btnAdmin = document.getElementById('btn-admin');
 
-      if (view === 'user') {
-        viewUser.classList.replace('hidden', 'block');
-        viewAdmin.classList.replace('block', 'hidden');
-        btnUser.className = "px-4 py-2 rounded-md bg-blue-600 text-white font-medium shadow-sm hover:bg-blue-700 transition";
-        btnAdmin.className = "px-4 py-2 rounded-md bg-slate-800 text-slate-300 font-medium hover:bg-slate-700 transition";
-      } else {
-        viewUser.classList.replace('block', 'hidden');
-        viewAdmin.classList.replace('hidden', 'block');
-        btnUser.className = "px-4 py-2 rounded-md bg-slate-800 text-slate-300 font-medium hover:bg-slate-700 transition";
-        btnAdmin.className = "px-4 py-2 rounded-md bg-blue-600 text-white font-medium shadow-sm hover:bg-blue-700 transition";
+      // 隱藏所有面板
+      viewApply.classList.add('hidden');
+      viewUserList.classList.add('hidden');
+      viewAdmin.classList.add('hidden');
+
+      // 按鈕樣式還原為未選取狀態
+      const allBtns = [btnApply, btnUserList, btnAdmin];
+      allBtns.forEach(btn => {
+        btn.classList.remove('bg-blue-600', 'text-white', 'shadow-sm', 'hover:bg-blue-700');
+        btn.classList.add('bg-slate-800', 'text-slate-300', 'hover:bg-slate-700');
+      });
+
+      let activeBtn = null;
+      if (view === 'apply') {
+        viewApply.classList.remove('hidden');
+        activeBtn = btnApply;
+      } else if (view === 'user-list') {
+        viewUserList.classList.remove('hidden');
+        activeBtn = btnUserList;
+        loadUserData();
+      } else if (view === 'admin') {
+        viewAdmin.classList.remove('hidden');
+        activeBtn = btnAdmin;
         loadAdminData();
+      }
+
+      // 套用選取狀態樣式
+      if (activeBtn) {
+        activeBtn.classList.remove('bg-slate-800', 'text-slate-300', 'hover:bg-slate-700');
+        activeBtn.classList.add('bg-blue-600', 'text-white', 'shadow-sm', 'hover:bg-blue-700');
       }
     }
 
@@ -173,6 +538,14 @@
     // 處理表單提交（含 FileReader 轉換圖片）
     function handleFormSubmit(e) {
       e.preventDefault();
+
+      // 前端二次安全防護：確認信箱網域
+      const emailVal = document.getElementById('email').value.toLowerCase();
+      if (!emailVal.endsWith('@fhsh.khc.edu.tw')) {
+        alert('請先登入 @fhsh.khc.edu.tw 帳號後再送出申請。');
+        return;
+      }
+
       const submitBtn = document.getElementById('submitBtn');
       submitBtn.disabled = true;
       submitBtn.innerText = '處理中...請稍候';
@@ -181,7 +554,7 @@
       const file = fileInput.files[0];
 
       const formData = {
-        email: document.getElementById('email').value,
+        email: emailVal,
         chineseName: document.getElementById('chineseName').value,
         englishName: document.getElementById('englishName').value,
         quantity: document.getElementById('quantity').value,
@@ -195,7 +568,7 @@
 
       if (file) {
         const reader = new FileReader();
-        reader.onload = function(e) {
+        reader.onload = function (e) {
           formData.photoBase64 = e.target.result;
           formData.photoName = file.name;
           sendDataToBackend(formData);
@@ -208,76 +581,391 @@
 
     function sendDataToBackend(formData) {
       google.script.run
-        .withSuccessHandler(function(response) {
+        .withSuccessHandler(function (response) {
           alert(response.message);
-          if(response.success) {
+          if (response.success) {
             document.getElementById('appForm').reset();
+            // 重設唯讀 Email 欄位值
+            document.getElementById('email').value = currentUserEmail;
             toggleConcentration();
+            removeImage(); // 清除圖片預覽
           }
           const submitBtn = document.getElementById('submitBtn');
           submitBtn.disabled = false;
           submitBtn.innerText = '提交申請';
         })
-        .withFailureHandler(function(err) {
+        .withFailureHandler(function (err) {
           alert('提交失敗: ' + err);
           const submitBtn = document.getElementById('submitBtn');
           submitBtn.disabled = false;
           submitBtn.innerText = '提交申請';
         })
-        .submitApplication(formData);
+        .submitApplication(formData, clientSessionId);
     }
 
-    // 載入後台管理資料
+    /* ---------------- 圖片貼上與預覽邏輯 ---------------- */
+    document.addEventListener('DOMContentLoaded', function () {
+      const fileInput = document.getElementById('photoFile');
+      const pasteZone = document.getElementById('paste-zone');
+
+      // 點擊選擇檔案後的變更事件
+      fileInput.addEventListener('change', function (e) {
+        if (e.target.files && e.target.files.length > 0) {
+          showPreview(e.target.files[0]);
+        }
+      });
+
+      // 監聽全域的貼上事件
+      document.addEventListener('paste', function (e) {
+        const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+        for (let index in items) {
+          const item = items[index];
+          if (item.kind === 'file' && item.type.startsWith('image/')) {
+            const blob = item.getAsFile();
+            // 將貼上的檔案塞入 file input
+            const dataTransfer = new DataTransfer();
+            dataTransfer.items.add(blob);
+            fileInput.files = dataTransfer.files;
+
+            showPreview(blob);
+            e.preventDefault(); // 防止預設行為
+            break;
+          }
+        }
+      });
+
+      // 拖曳上傳支援
+      pasteZone.addEventListener('dragover', function (e) {
+        e.preventDefault();
+        pasteZone.classList.add('bg-blue-50', 'border-blue-400');
+      });
+
+      pasteZone.addEventListener('dragleave', function (e) {
+        e.preventDefault();
+        pasteZone.classList.remove('bg-blue-50', 'border-blue-400');
+      });
+
+      pasteZone.addEventListener('drop', function (e) {
+        e.preventDefault();
+        pasteZone.classList.remove('bg-blue-50', 'border-blue-400');
+
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+          const file = e.dataTransfer.files[0];
+          if (file.type.startsWith('image/')) {
+            fileInput.files = e.dataTransfer.files;
+            showPreview(file);
+          } else {
+            alert('請上傳圖片格式的檔案！');
+          }
+        }
+      });
+    });
+
+    function showPreview(file) {
+      const previewContainer = document.getElementById('preview-container');
+      const uploadPrompt = document.getElementById('upload-prompt');
+      const imagePreview = document.getElementById('image-preview');
+      const imageFilename = document.getElementById('image-filename');
+
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        imagePreview.src = e.target.result;
+        imageFilename.textContent = file.name || '貼上的圖片.png';
+        uploadPrompt.classList.add('hidden');
+        previewContainer.classList.remove('hidden');
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function removeImage(e) {
+      if (e) e.stopPropagation();
+      const fileInput = document.getElementById('photoFile');
+      const previewContainer = document.getElementById('preview-container');
+      const uploadPrompt = document.getElementById('upload-prompt');
+      const imagePreview = document.getElementById('image-preview');
+
+      fileInput.value = ''; // 清空選擇
+      imagePreview.src = '';
+      previewContainer.classList.add('hidden');
+      uploadPrompt.classList.remove('hidden');
+    }
+
+    // 狀態色彩標籤
+    function getStatusBadge(status) {
+      if (status === '已請購') {
+        return `<span class="px-2 py-0.5 rounded text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">已請購</span>`;
+      } else if (status === '不通過') {
+        return `<span class="px-2 py-0.5 rounded text-xs font-semibold bg-rose-100 text-rose-800 border border-rose-200">不通過</span>`;
+      } else {
+        return `<span class="px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200">未請購</span>`;
+      }
+    }
+
+    // 動態年份篩選下拉選單載入
+    function populateYearFilters(data, selectId) {
+      const select = document.getElementById(selectId);
+      if (!select) return;
+
+      const currentValue = select.value;
+      select.innerHTML = '<option value="">全部年份</option>';
+
+      const years = new Set();
+      data.forEach(function (item) {
+        if (item.timestamp) {
+          const y = item.timestamp.split('-')[0];
+          if (y && y.length === 4) years.add(y);
+        }
+      });
+
+      const sortedYears = Array.from(years).sort(function (a, b) { return b - a; });
+      sortedYears.forEach(function (y) {
+        const opt = document.createElement('option');
+        opt.value = y;
+        opt.textContent = y + ' 年';
+        if (y === currentValue) opt.selected = true;
+        select.appendChild(opt);
+      });
+    }
+
+    /* ---------------- 個人申請紀錄清單處理 ---------------- */
+    function loadUserData() {
+      const tbody = document.getElementById('userTableBody');
+      tbody.innerHTML = '<tr><td colspan="8" class="p-4 text-center text-slate-400">載入資料中...</td></tr>';
+
+      google.script.run
+        .withSuccessHandler(function (data) {
+          rawUserData = data || [];
+          populateYearFilters(rawUserData, 'user-filter-year');
+          applyUserFilters();
+        })
+        .withFailureHandler(function (err) {
+          tbody.innerHTML = `<tr><td colspan="8" class="p-4 text-center text-red-500">載入資料失敗：${err.message || err}</td></tr>`;
+        })
+        .getUserData(clientSessionId);
+    }
+
+    function applyUserFilters() {
+      const year = document.getElementById('user-filter-year').value;
+      const month = document.getElementById('user-filter-month').value;
+
+      filteredUserData = rawUserData.filter(function (item) {
+        if (!item.timestamp) return false;
+        const parts = item.timestamp.split('-');
+        const itemYear = parts[0];
+        const itemMonth = parts[1]; // "MM"
+
+        const matchYear = !year || itemYear === year;
+        const matchMonth = !month || itemMonth === month;
+        return matchYear && matchMonth;
+      });
+
+      userCurrentPage = 1;
+      renderUserTable();
+    }
+
+    function renderUserTable() {
+      const tbody = document.getElementById('userTableBody');
+      const totalItems = filteredUserData.length;
+
+      if (totalItems === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="p-4 text-center text-slate-400">目前尚無符合的申請紀錄</td></tr>';
+        document.getElementById('user-page-info').textContent = '第 0 / 0 頁';
+        document.getElementById('btn-user-prev').disabled = true;
+        document.getElementById('btn-user-next').disabled = true;
+        return;
+      }
+
+      const totalPages = Math.ceil(totalItems / userPageSize);
+      if (userCurrentPage > totalPages) userCurrentPage = totalPages;
+      if (userCurrentPage < 1) userCurrentPage = 1;
+
+      const startIdx = (userCurrentPage - 1) * userPageSize;
+      const endIdx = Math.min(startIdx + userPageSize, totalItems);
+      const pageItems = filteredUserData.slice(startIdx, endIdx);
+
+      let html = '';
+      pageItems.forEach(function (item) {
+        let photoLink = item.photoUrl !== '無照片'
+          ? `<a href="${item.photoUrl}" target="_blank" class="text-blue-600 hover:underline font-medium">檢視照片</a>`
+          : `<span class="text-slate-400">無</span>`;
+
+        html += `
+          <tr class="hover:bg-slate-50 border-b border-slate-100">
+            <td class="p-3 text-xs whitespace-nowrap">${item.timestamp}</td>
+            <td class="p-3"><span class="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700">${item.subject}</span></td>
+            <td class="p-3 font-medium text-slate-900">${item.chineseName}</td>
+            <td class="p-3 text-xs">${item.englishName} ${item.concentration && item.concentration !== '無' ? '<br><span class="text-slate-400">濃度:' + item.concentration + '</span>' : ''}</td>
+            <td class="p-3 text-center font-semibold text-slate-800">${item.quantity}</td>
+            <td class="p-3 text-center text-xs whitespace-nowrap">${item.category}</td>
+            <td class="p-3 text-center text-xs whitespace-nowrap">${photoLink}</td>
+            <td class="p-3 text-center">${getStatusBadge(item.status)}</td>
+          </tr>
+        `;
+      });
+      tbody.innerHTML = html;
+
+      document.getElementById('user-page-info').textContent = `第 ${userCurrentPage} / ${totalPages} 頁 (共 ${totalItems} 筆)`;
+      document.getElementById('btn-user-prev').disabled = (userCurrentPage === 1);
+      document.getElementById('btn-user-next').disabled = (userCurrentPage === totalPages);
+    }
+
+    function changeUserPageSize(val) {
+      userPageSize = parseInt(val);
+      userCurrentPage = 1;
+      renderUserTable();
+    }
+
+    function prevUserPage() {
+      if (userCurrentPage > 1) {
+        userCurrentPage--;
+        renderUserTable();
+      }
+    }
+
+    function nextUserPage() {
+      const totalPages = Math.ceil(filteredUserData.length / userPageSize);
+      if (userCurrentPage < totalPages) {
+        userCurrentPage++;
+        renderUserTable();
+      }
+    }
+
+
+    /* ---------------- 管理者審核後台處理 ---------------- */
     function loadAdminData() {
       const tbody = document.getElementById('adminTableBody');
       tbody.innerHTML = '<tr><td colspan="9" class="p-4 text-center text-slate-400">載入資料中...</td></tr>';
-      
-      google.script.run.withSuccessHandler(function(data) {
-        if(data.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="9" class="p-4 text-center text-slate-400">目前尚無申請紀錄</td></tr>';
-          return;
-        }
-        
-        let html = '';
-        data.forEach(function(item) {
-          let statusSelect = `
-            <select onchange="updateStatus(${item.rowNumber}, this.value)" class="rounded border p-1 text-xs bg-white focus:outline-none">
-              <option value="未請購" ${item.status === '未請購' ? 'selected' : ''}>未請購</option>
-              <option value="已請購" ${item.status === '已請購' ? 'selected' : ''}>已請購</option>
-              <option value="不通過" ${item.status === '不通過' ? 'selected' : ''}>不通過</option>
-            </select>
-          `;
-          
-          let photoLink = item.photoUrl !== '無照片' 
-            ? `<a href="${item.photoUrl}" target="_blank" class="text-blue-600 hover:underline">檢視照片</a>` 
-            : `<span class="text-slate-400">無</span>`;
-            
-          html += `
-            <tr class="hover:bg-slate-50 border-b border-slate-100">
-              <td class="p-3 text-xs whitespace-nowrap">${item.timestamp}</td>
-              <td class="p-3"><span class="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700">${item.subject}</span></td>
-              <td class="p-3 font-medium text-slate-900">${item.chineseName}</td>
-              <td class="p-3 text-xs">${item.englishName} ${item.concentration ? '<br><span class="text-slate-400">濃度:'+item.concentration+'</span>' : ''}</td>
-              <td class="p-3 text-center font-semibold">${item.quantity}</td>
-              <td class="p-3 text-center text-xs whitespace-nowrap">${item.category}</td>
-              <td class="p-3 text-xs">${item.email}</td>
-              <td class="p-3 text-center text-xs whitespace-nowrap">${photoLink}</td>
-              <td class="p-3 text-center">${statusSelect}</td>
-            </tr>
-          `;
-        });
-        tbody.innerHTML = html;
-      }).getAdminData();
+
+      google.script.run
+        .withSuccessHandler(function (data) {
+          rawAdminData = data || [];
+          populateYearFilters(rawAdminData, 'admin-filter-year');
+          applyAdminFilters();
+        })
+        .withFailureHandler(function (err) {
+          tbody.innerHTML = `<tr><td colspan="9" class="p-4 text-center text-red-500">載入資料失敗：${err.message || err}</td></tr>`;
+        })
+        .getAdminData(clientSessionId);
+    }
+
+    function applyAdminFilters() {
+      const year = document.getElementById('admin-filter-year').value;
+      const month = document.getElementById('admin-filter-month').value;
+
+      filteredAdminData = rawAdminData.filter(function (item) {
+        if (!item.timestamp) return false;
+        const parts = item.timestamp.split('-');
+        const itemYear = parts[0];
+        const itemMonth = parts[1];
+
+        const matchYear = !year || itemYear === year;
+        const matchMonth = !month || itemMonth === month;
+        return matchYear && matchMonth;
+      });
+
+      adminCurrentPage = 1;
+      renderAdminTable();
+    }
+
+    function renderAdminTable() {
+      const tbody = document.getElementById('adminTableBody');
+      const totalItems = filteredAdminData.length;
+
+      if (totalItems === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" class="p-4 text-center text-slate-400">目前尚無符合的請購資料</td></tr>';
+        document.getElementById('admin-page-info').textContent = '第 0 / 0 頁';
+        document.getElementById('btn-admin-prev').disabled = true;
+        document.getElementById('btn-admin-next').disabled = true;
+        return;
+      }
+
+      const totalPages = Math.ceil(totalItems / adminPageSize);
+      if (adminCurrentPage > totalPages) adminCurrentPage = totalPages;
+      if (adminCurrentPage < 1) adminCurrentPage = 1;
+
+      const startIdx = (adminCurrentPage - 1) * adminPageSize;
+      const endIdx = Math.min(startIdx + adminPageSize, totalItems);
+      const pageItems = filteredAdminData.slice(startIdx, endIdx);
+
+      let html = '';
+      pageItems.forEach(function (item) {
+        let statusSelect = `
+          <select onchange="updateStatus(${item.rowNumber}, this.value)" class="rounded border p-1 text-xs bg-white focus:outline-none">
+            <option value="未請購" ${item.status === '未請購' ? 'selected' : ''}>未請購</option>
+            <option value="已請購" ${item.status === '已請購' ? 'selected' : ''}>已請購</option>
+            <option value="不通過" ${item.status === '不通過' ? 'selected' : ''}>不通過</option>
+          </select>
+        `;
+
+        let photoLink = item.photoUrl !== '無照片'
+          ? `<a href="${item.photoUrl}" target="_blank" class="text-blue-600 hover:underline font-medium">檢視照片</a>`
+          : `<span class="text-slate-400">無</span>`;
+
+        html += `
+          <tr class="hover:bg-slate-50 border-b border-slate-100">
+            <td class="p-3 text-xs whitespace-nowrap">${item.timestamp}</td>
+            <td class="p-3"><span class="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700">${item.subject}</span></td>
+            <td class="p-3 font-medium text-slate-900">${item.chineseName}</td>
+            <td class="p-3 text-xs">${item.englishName} ${item.concentration && item.concentration !== '無' ? '<br><span class="text-slate-400">濃度:' + item.concentration + '</span>' : ''}</td>
+            <td class="p-3 text-center font-semibold text-slate-800">${item.quantity}</td>
+            <td class="p-3 text-center text-xs whitespace-nowrap">${item.category}</td>
+            <td class="p-3 text-xs">${item.email}</td>
+            <td class="p-3 text-center text-xs whitespace-nowrap">${photoLink}</td>
+            <td class="p-3 text-center">${statusSelect}</td>
+          </tr>
+        `;
+      });
+      tbody.innerHTML = html;
+
+      document.getElementById('admin-page-info').textContent = `第 ${adminCurrentPage} / ${totalPages} 頁 (共 ${totalItems} 筆)`;
+      document.getElementById('btn-admin-prev').disabled = (adminCurrentPage === 1);
+      document.getElementById('btn-admin-next').disabled = (adminCurrentPage === totalPages);
+    }
+
+    function changeAdminPageSize(val) {
+      adminPageSize = parseInt(val);
+      adminCurrentPage = 1;
+      renderAdminTable();
+    }
+
+    function prevAdminPage() {
+      if (adminCurrentPage > 1) {
+        adminCurrentPage--;
+        renderAdminTable();
+      }
+    }
+
+    function nextAdminPage() {
+      const totalPages = Math.ceil(filteredAdminData.length / adminPageSize);
+      if (adminCurrentPage < totalPages) {
+        adminCurrentPage++;
+        renderAdminTable();
+      }
     }
 
     // 更新狀態
     function updateStatus(rowNumber, newStatus) {
-      google.script.run.withSuccessHandler(function(res) {
-        if(!res.success) {
-          alert('狀態更新失敗');
-        }
-      }).updateProcurementStatus(rowNumber, newStatus);
+      google.script.run
+        .withSuccessHandler(function (res) {
+          if (res.success) {
+            // 本地更新記憶體中的資料以維持當前分頁與過濾器狀態，提昇使用者體驗
+            const item = rawAdminData.find(i => i.rowNumber === rowNumber);
+            if (item) {
+              item.status = newStatus;
+            }
+            renderAdminTable();
+          } else {
+            alert('狀態更新失敗：' + (res.message || '未知錯誤'));
+            loadAdminData(); // 失敗則重載
+          }
+        })
+        .withFailureHandler(function (err) {
+          alert('連線失敗，狀態未更新：' + err.message);
+          loadAdminData(); // 失敗則重載
+        })
+        .updateProcurementStatus(rowNumber, newStatus, clientSessionId);
     }
   </script>
 </body>
+
 </html>
