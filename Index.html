@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif; }
+  </style>
+</head>
+<body class="bg-slate-50 min-h-screen text-slate-800">
+
+  <nav class="bg-slate-900 text-white shadow-md">
+    <div class="max-w-7xl mx-auto px-4 flex justify-between items-center h-16">
+      <div class="font-bold text-lg tracking-wider">自然科課程藥品/物品管理系統</div>
+      <div class="flex space-x-2">
+        <button id="btn-user" onclick="switchView('user')" class="px-4 py-2 rounded-md bg-blue-600 text-white font-medium shadow-sm hover:bg-blue-700 transition">
+          使用者申請
+        </button>
+        <button id="btn-admin" onclick="switchView('admin')" class="px-4 py-2 rounded-md bg-slate-800 text-slate-300 font-medium hover:bg-slate-700 transition">
+          管理者後台
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <main class="max-w-7xl mx-auto px-4 py-8">
+    
+    <div id="view-user" class="block max-w-2xl mx-auto bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+      <h2 class="text-xl font-bold text-slate-900 mb-6 border-b pb-3">課程化學藥品 / 物品申請表單</h2>
+      
+      <form id="appForm" onsubmit="handleFormSubmit(event)" class="space-y-5">
+        
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 mb-1">申請人電子郵件地址</label>
+          <input type="email" id="email" name="email" required readonly class="w-full rounded-md border-slate-300 bg-slate-100 px-3 py-2 text-slate-600 border focus:outline-none">
+        </div>
+
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 mb-1">物品/藥品中文名稱 <span class="text-red-500">*</span></label>
+          <input type="text" id="chineseName" name="chineseName" required class="w-full rounded-md border-slate-300 px-3 py-2 border focus:ring-2 focus:ring-blue-500 focus:outline-none">
+        </div>
+
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 mb-1">藥品英文名稱 (含化學式、分子量) 或物品規格名稱 <span class="text-red-500">*</span></label>
+          <input type="text" id="englishName" name="englishName" required class="w-full rounded-md border-slate-300 px-3 py-2 border focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="例如：Copper(II) sulfate CuSO4, MW: 159.6">
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-semibold text-slate-700 mb-1">所需數量 <span class="text-red-500">*</span></label>
+            <input type="number" id="quantity" name="quantity" min="1" required class="w-full rounded-md border-slate-300 px-3 py-2 border focus:ring-2 focus:ring-blue-500 focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-slate-700 mb-1">物品分類/化學藥品狀態 <span class="text-red-500">*</span></label>
+            <select id="category" name="category" required onchange="toggleConcentration()" class="w-full rounded-md border-slate-300 px-3 py-2 border bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none">
+              <option value="固態藥品">固態藥品</option>
+              <option value="液態藥品">液態藥品</option>
+              <option value="一般物品">一般物品</option>
+              <option value="玻璃器材">玻璃器材</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="concentration-block" class="hidden">
+          <label class="block text-sm font-semibold text-slate-700 mb-1">藥品濃度 (液態) <span class="text-red-500">*</span></label>
+          <input type="text" id="concentration" name="concentration" class="w-full rounded-md border-slate-300 px-3 py-2 border focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="例如：12 M 或 35%">
+        </div>
+
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 mb-1">課程使用時間 <span class="text-red-500">*</span></label>
+          <input type="datetime-local" id="usageTime" name="usageTime" required class="w-full rounded-md border-slate-300 px-3 py-2 border focus:ring-2 focus:ring-blue-500 focus:outline-none">
+        </div>
+
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 mb-1">請勾選所需科別 <span class="text-red-500">*</span></label>
+          <div class="flex space-x-4 mt-2">
+            <label class="inline-flex items-center"><input type="radio" name="subject" value="物理" checked class="text-blue-600 focus:ring-blue-500"><span class="ml-2">物理</span></label>
+            <label class="inline-flex items-center"><input type="radio" name="subject" value="化學" class="text-blue-600 focus:ring-blue-500"><span class="ml-2">化學</span></label>
+            <label class="inline-flex items-center"><input type="radio" name="subject" value="生物" class="text-blue-600 focus:ring-blue-500"><span class="ml-2">生物</span></label>
+            <label class="inline-flex items-center"><input type="radio" name="subject" value="地科" class="text-blue-600 focus:ring-blue-500"><span class="ml-2">地科</span></label>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 mb-1">物品/藥品照片</label>
+          <input type="file" id="photoFile" accept="image/*" class="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+        </div>
+
+        <div class="pt-2">
+          <button type="submit" id="submitBtn" class="w-full py-2.5 rounded-md bg-blue-600 text-white font-semibold hover:bg-blue-700 focus:ring-4 focus:ring-blue-200 transition shadow-sm">
+            提交申請
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <div id="view-admin" class="hidden bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+      <div class="flex justify-between items-center mb-6 border-b pb-3">
+        <h2 class="text-xl font-bold text-slate-900">採購與申請管理審核面版</h2>
+        <button onclick="loadAdminData()" class="px-3 py-1.5 bg-slate-100 text-slate-700 rounded border hover:bg-slate-200 text-sm font-medium">
+          重新整理資料
+        </button>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse text-sm">
+          <thead>
+            <tr class="bg-slate-100 border-b border-slate-200 text-slate-700 font-semibold">
+              <th class="p-3">時間戳記</th>
+              <th class="p-3">科別</th>
+              <th class="p-3">中文名稱</th>
+              <th class="p-3">規格/英文名稱</th>
+              <th class="p-3 w-16 text-center">數量</th>
+              <th class="p-3 text-center">分類</th>
+              <th class="p-3">申請人</th>
+              <th class="p-3 text-center">照片</th>
+              <th class="p-3 text-center">是否請購</th>
+            </tr>
+          </thead>
+          <tbody id="adminTableBody" class="divide-y divide-slate-100 text-slate-600">
+            </tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    // 初始化設定
+    window.onload = function() {
+      // 載入當前使用者 Email
+      google.script.run.withSuccessHandler(function(email) {
+        document.getElementById('email').value = email || '無法取得帳號';
+      }).getCurrentUserEmail();
+    };
+
+    // 切換使用者與管理者畫面
+    function switchView(view) {
+      const viewUser = document.getElementById('view-user');
+      const viewAdmin = document.getElementById('view-admin');
+      const btnUser = document.getElementById('btn-user');
+      const btnAdmin = document.getElementById('btn-admin');
+
+      if (view === 'user') {
+        viewUser.classList.replace('hidden', 'block');
+        viewAdmin.classList.replace('block', 'hidden');
+        btnUser.className = "px-4 py-2 rounded-md bg-blue-600 text-white font-medium shadow-sm hover:bg-blue-700 transition";
+        btnAdmin.className = "px-4 py-2 rounded-md bg-slate-800 text-slate-300 font-medium hover:bg-slate-700 transition";
+      } else {
+        viewUser.classList.replace('block', 'hidden');
+        viewAdmin.classList.replace('hidden', 'block');
+        btnUser.className = "px-4 py-2 rounded-md bg-slate-800 text-slate-300 font-medium hover:bg-slate-700 transition";
+        btnAdmin.className = "px-4 py-2 rounded-md bg-blue-600 text-white font-medium shadow-sm hover:bg-blue-700 transition";
+        loadAdminData();
+      }
+    }
+
+    // 動態切換液態藥品濃度輸入格
+    function toggleConcentration() {
+      const cat = document.getElementById('category').value;
+      const block = document.getElementById('concentration-block');
+      const input = document.getElementById('concentration');
+      if (cat === '液態藥品') {
+        block.classList.remove('hidden');
+        input.required = true;
+      } else {
+        block.classList.add('hidden');
+        input.required = false;
+        input.value = '';
+      }
+    }
+
+    // 處理表單提交（含 FileReader 轉換圖片）
+    function handleFormSubmit(e) {
+      e.preventDefault();
+      const submitBtn = document.getElementById('submitBtn');
+      submitBtn.disabled = true;
+      submitBtn.innerText = '處理中...請稍候';
+
+      const fileInput = document.getElementById('photoFile');
+      const file = fileInput.files[0];
+
+      const formData = {
+        email: document.getElementById('email').value,
+        chineseName: document.getElementById('chineseName').value,
+        englishName: document.getElementById('englishName').value,
+        quantity: document.getElementById('quantity').value,
+        category: document.getElementById('category').value,
+        concentration: document.getElementById('concentration').value,
+        usageTime: document.getElementById('usageTime').value,
+        subject: document.querySelector('input[name="subject"]:checked').value,
+        photoBase64: null,
+        photoName: null
+      };
+
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          formData.photoBase64 = e.target.result;
+          formData.photoName = file.name;
+          sendDataToBackend(formData);
+        };
+        reader.readAsDataURL(file);
+      } else {
+        sendDataToBackend(formData);
+      }
+    }
+
+    function sendDataToBackend(formData) {
+      google.script.run
+        .withSuccessHandler(function(response) {
+          alert(response.message);
+          if(response.success) {
+            document.getElementById('appForm').reset();
+            toggleConcentration();
+          }
+          const submitBtn = document.getElementById('submitBtn');
+          submitBtn.disabled = false;
+          submitBtn.innerText = '提交申請';
+        })
+        .withFailureHandler(function(err) {
+          alert('提交失敗: ' + err);
+          const submitBtn = document.getElementById('submitBtn');
+          submitBtn.disabled = false;
+          submitBtn.innerText = '提交申請';
+        })
+        .submitApplication(formData);
+    }
+
+    // 載入後台管理資料
+    function loadAdminData() {
+      const tbody = document.getElementById('adminTableBody');
+      tbody.innerHTML = '<tr><td colspan="9" class="p-4 text-center text-slate-400">載入資料中...</td></tr>';
+      
+      google.script.run.withSuccessHandler(function(data) {
+        if(data.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="9" class="p-4 text-center text-slate-400">目前尚無申請紀錄</td></tr>';
+          return;
+        }
+        
+        let html = '';
+        data.forEach(function(item) {
+          let statusSelect = `
+            <select onchange="updateStatus(${item.rowNumber}, this.value)" class="rounded border p-1 text-xs bg-white focus:outline-none">
+              <option value="未請購" ${item.status === '未請購' ? 'selected' : ''}>未請購</option>
+              <option value="已請購" ${item.status === '已請購' ? 'selected' : ''}>已請購</option>
+              <option value="不通過" ${item.status === '不通過' ? 'selected' : ''}>不通過</option>
+            </select>
+          `;
+          
+          let photoLink = item.photoUrl !== '無照片' 
+            ? `<a href="${item.photoUrl}" target="_blank" class="text-blue-600 hover:underline">檢視照片</a>` 
+            : `<span class="text-slate-400">無</span>`;
+            
+          html += `
+            <tr class="hover:bg-slate-50 border-b border-slate-100">
+              <td class="p-3 text-xs whitespace-nowrap">${item.timestamp}</td>
+              <td class="p-3"><span class="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700">${item.subject}</span></td>
+              <td class="p-3 font-medium text-slate-900">${item.chineseName}</td>
+              <td class="p-3 text-xs">${item.englishName} ${item.concentration ? '<br><span class="text-slate-400">濃度:'+item.concentration+'</span>' : ''}</td>
+              <td class="p-3 text-center font-semibold">${item.quantity}</td>
+              <td class="p-3 text-center text-xs whitespace-nowrap">${item.category}</td>
+              <td class="p-3 text-xs">${item.email}</td>
+              <td class="p-3 text-center text-xs whitespace-nowrap">${photoLink}</td>
+              <td class="p-3 text-center">${statusSelect}</td>
+            </tr>
+          `;
+        });
+        tbody.innerHTML = html;
+      }).getAdminData();
+    }
+
+    // 更新狀態
+    function updateStatus(rowNumber, newStatus) {
+      google.script.run.withSuccessHandler(function(res) {
+        if(!res.success) {
+          alert('狀態更新失敗');
+        }
+      }).updateProcurementStatus(rowNumber, newStatus);
+    }
+  </script>
+</body>
+</html>
