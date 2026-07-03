@@ -14,7 +14,8 @@
 <body class="bg-slate-50 min-h-screen text-slate-800">
 
   <!-- 全域載入遮罩 -->
-  <div id="loading-overlay" class="fixed inset-0 bg-slate-50 z-50 flex flex-col items-center justify-center transition-opacity duration-300">
+  <div id="loading-overlay"
+    class="fixed inset-0 bg-slate-50 z-50 flex flex-col items-center justify-center transition-opacity duration-300">
     <div class="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent mb-4"></div>
     <div class="text-slate-600 font-medium tracking-wide">正在驗證您的身分與權限，請稍候...</div>
   </div>
@@ -49,11 +50,23 @@
     <div id="view-apply" class="block max-w-2xl mx-auto bg-white rounded-xl shadow-sm border border-slate-200 p-6">
       <h2 class="text-xl font-bold text-slate-900 mb-6 border-b pb-3">課程化學藥品 / 物品申請表單</h2>
 
+      <!-- 說明文字 -->
+      <div
+        class="mb-6 bg-blue-50 border border-blue-200 text-blue-800 p-4 rounded-lg text-sm leading-relaxed shadow-sm">
+        <p class="font-bold mb-2 text-base text-blue-900">此表單僅供自然科課程實驗、科展及等能力競賽..等相關藥品、物品(1萬元以下) 申請單。</p>
+        <ol class="list-decimal list-inside space-y-1.5 ml-1">
+          <li>一次填寫一個藥品或物品，如有多個藥品需求，請重複填寫。</li>
+          <li>高雄的化工材料行 不可能每樣都有，因此學校配合廠商也只能從台北拿貨。</li>
+          <li>請務必兩周前提出申請，以免延誤。</li>
+          <li>自然科專題課程的藥品物品需求，由於部分材料有獨特性，更不可能在一週內或更短時間就送達學校，請見諒。</li>
+          <li>實習實驗費還要供應 自然科探究實作 及常規實驗，這一年物價上漲的很恐怖，請老師節約使用。</li>
+        </ol>
+      </div>
+
       <!-- 未登入或無權限提示橫幅 -->
       <div id="login-warning"
         class="mb-6 p-4 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 flex items-start space-x-3 hidden">
-        <svg class="h-5 w-5 text-amber-500 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24"
-          stroke="currentColor">
+        <svg class="h-5 w-5 text-amber-500 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
             d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
         </svg>
@@ -69,50 +82,64 @@
           <input type="text" id="applicant" name="applicant" required readonly
             class="w-full rounded-md border-slate-300 bg-slate-100 px-3 py-2 text-slate-600 border focus:outline-none">
         </div>
-
-        <div>
-          <label class="block text-sm font-semibold text-slate-700 mb-1">申請人電子郵件地址</label>
-          <input type="email" id="email" name="email" required readonly
-            class="w-full rounded-md border-slate-300 bg-slate-100 px-3 py-2 text-slate-600 border focus:outline-none">
-        </div>
-
+        <input type="hidden" id="email" name="email">
         <div>
           <label class="block text-sm font-semibold text-slate-700 mb-1">物品/藥品中文名稱 <span
               class="text-red-500">*</span></label>
           <input type="text" id="chineseName" name="chineseName" required
-            class="w-full rounded-md border-slate-300 px-3 py-2 border focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            class="w-full rounded-md border-slate-300 px-3 py-2 border focus:ring-2 focus:ring-blue-500 focus:outline-none placeholder-yellow-600"
+            placeholder="例如：氯化銅">
+          <p class="text-xs text-slate-500">請填寫正確中文名稱，物品包含簡易實驗器材 比如玻片、滴管..等</p>
+
         </div>
 
         <div>
           <label class="block text-sm font-semibold text-slate-700 mb-1">藥品英文名稱 (含化學式、分子量) 或物品規格名稱 <span
               class="text-red-500">*</span></label>
           <input type="text" id="englishName" name="englishName" required
-            class="w-full rounded-md border-slate-300 px-3 py-2 border focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            class="w-full rounded-md border-slate-300 px-3 py-2 border focus:ring-2 focus:ring-blue-500 focus:outline-none  placeholder-yellow-600"
             placeholder="例如：Copper(II) sulfate CuSO4, MW: 159.6">
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-semibold text-slate-700 mb-1">單位 <span
+                class="text-red-500">*</span></label>
+            <input type="text" id="unit" name="unit" required
+              class="w-full rounded-md border-slate-300 px-3 py-2 border focus:ring-2 focus:ring-blue-500 focus:outline-none placeholder-slate-400"
+              placeholder="例如：瓶、包、公克">
+          </div>
           <div>
             <label class="block text-sm font-semibold text-slate-700 mb-1">所需數量 <span
                 class="text-red-500">*</span></label>
             <input type="number" id="quantity" name="quantity" min="1" required
               class="w-full rounded-md border-slate-300 px-3 py-2 border focus:ring-2 focus:ring-blue-500 focus:outline-none">
           </div>
-          <div>
-            <label class="block text-sm font-semibold text-slate-700 mb-1">物品分類/化學藥品狀態 <span
-                class="text-red-500">*</span></label>
-            <select id="category" name="category" required onchange="toggleConcentration()"
-              class="w-full rounded-md border-slate-300 px-3 py-2 border bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none">
+        </div>
 
-              <option value="固態藥品">固態(粉)</option>
-              <option value="固態藥品">固態(顆粒)</option>
-              <option value="液態藥品">液態藥品</option>
-              <option value="肉類內臟">肉類內臟</option>
-              <option value="蔬菜水果">蔬菜水果</option>
-              <option value="活體">活體(如青蛙)</option>
-              <option value="實驗器材">實驗器材(耗材,如塑膠滴管、玻片、試管、量筒等)</option>
-            </select>
-          </div>
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 mb-1">物品分類/化學藥品狀態 <span
+              class="text-red-500">*</span></label>
+          <select id="category" name="category" required onchange="toggleCategoryFields()"
+            class="w-full rounded-md border-slate-300 px-3 py-2 border bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none">
+
+            <option value="固態藥品">固態(粉)</option>
+            <option value="固態藥品">固態(顆粒)</option>
+            <option value="液態藥品">液態藥品</option>
+            <option value="肉類內臟">肉類內臟</option>
+            <option value="蔬菜水果">蔬菜水果</option>
+            <option value="活體">活體(如青蛙)</option>
+            <option value="實驗器材">實驗器材(耗材,如塑膠滴管、玻片、試管、量筒等)</option>
+            <option value="其他">其他</option>
+          </select>
+        </div>
+
+        <div id="other-category-block" class="hidden mt-4">
+          <label class="block text-sm font-semibold text-slate-700 mb-1">自定義分類/狀態 <span
+              class="text-red-500">*</span></label>
+          <input type="text" id="otherCategory" name="otherCategory"
+            class="w-full rounded-md border-slate-300 px-3 py-2 border focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            placeholder="請輸入物品分類或狀態">
         </div>
 
         <div id="concentration-block" class="hidden">
@@ -121,11 +148,11 @@
           <input type="text" id="concentration" name="concentration"
             class="w-full rounded-md border-slate-300 px-3 py-2 border focus:ring-2 focus:ring-blue-500 focus:outline-none"
             placeholder="例如：12 M 或 35%">
-            <label class="block text-sm font-semibold text-slate-700 mb-1">藥品容量 (液態) <span
+          <label class="block text-sm font-semibold text-slate-700 mb-1">藥品容量 (液態) <span
               class="text-red-500">*</span></label>
           <input type="text" id="volume" name="volume"
             class="w-full rounded-md border-slate-300 px-3 py-2 border focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              placeholder="例如：500 mL">
+            placeholder="例如：500 mL">
         </div>
 
         <div>
@@ -133,6 +160,7 @@
               class="text-red-500">*</span></label>
           <input type="datetime-local" id="usageTime" name="usageTime" required
             class="w-full rounded-md border-slate-300 px-3 py-2 border focus:ring-2 focus:ring-blue-500 focus:outline-none">
+          <p class="text-xs text-slate-500">請敘明何時使用該藥品/物品。因設備組採購有其流程時間，請務必兩周前提出申請，以免延誤。</p>
         </div>
 
         <div>
@@ -466,7 +494,7 @@
         currentUserDisplayName = '';
         document.getElementById('applicant').value = '尚未登入';
         document.getElementById('email').value = '尚未登入';
-        
+
         btnAuth.innerText = '登入';
         btnAuth.href = status.loginUrl || '#';
         btnAuth.onclick = null;
@@ -475,8 +503,8 @@
 
         // 每 8 分鐘自動更新登入網址，避免 state token 過期 (時效為 10 分鐘)
         if (!window.loginUrlInterval) {
-          window.loginUrlInterval = setInterval(function() {
-            google.script.run.withSuccessHandler(function(url) {
+          window.loginUrlInterval = setInterval(function () {
+            google.script.run.withSuccessHandler(function (url) {
               if (document.getElementById('btn-login-logout').innerText === '登入') {
                 document.getElementById('btn-login-logout').href = url;
               }
@@ -487,7 +515,7 @@
         loginWarning.classList.remove('hidden');
         document.getElementById('login-warning-title').innerText = '提示：需登入後才能送出請購';
         document.getElementById('login-warning-desc').innerText = '目前為唯讀瀏覽狀態。您必須點擊右上方的「登入」按鈕，並使用學校 @fhsh.khc.edu.tw 帳號後才能填寫並送出請購申請。';
-        
+
         submitBtn.disabled = true;
         submitBtn.innerText = '需登入後才能送出請購';
         submitBtn.className = "w-full py-2.5 rounded-md bg-slate-400 text-slate-200 font-semibold cursor-not-allowed transition shadow-sm";
@@ -541,22 +569,34 @@
       }
     }
 
-    // 動態切換液態藥品濃度輸入格
-    function toggleConcentration() {
+    // 動態切換液態藥品濃度輸入格及自定義分類輸入格
+    function toggleCategoryFields() {
       const cat = document.getElementById('category').value;
-      const block = document.getElementById('concentration-block');
-      const input = document.getElementById('concentration');
+      const blockConc = document.getElementById('concentration-block');
+      const inputConc = document.getElementById('concentration');
       const volumeInput = document.getElementById('volume');
+
       if (cat === '液態藥品') {
-        block.classList.remove('hidden');
-        input.required = true;
+        blockConc.classList.remove('hidden');
+        inputConc.required = true;
         volumeInput.required = true;
       } else {
-        block.classList.add('hidden');
-        input.required = false;
+        blockConc.classList.add('hidden');
+        inputConc.required = false;
         volumeInput.required = false;
-        input.value = '';
+        inputConc.value = '';
         volumeInput.value = '';
+      }
+
+      const blockOther = document.getElementById('other-category-block');
+      const inputOther = document.getElementById('otherCategory');
+      if (cat === '其他') {
+        blockOther.classList.remove('hidden');
+        inputOther.required = true;
+      } else {
+        blockOther.classList.add('hidden');
+        inputOther.required = false;
+        inputOther.value = '';
       }
     }
 
@@ -578,13 +618,21 @@
       const fileInput = document.getElementById('photoFile');
       const file = fileInput.files[0];
 
+      let selectedCategory = document.getElementById('category').value;
+      if (selectedCategory === '其他') {
+        selectedCategory = document.getElementById('otherCategory').value;
+      }
+
+      const qty = document.getElementById('quantity').value;
+      const unt = document.getElementById('unit').value;
+
       const formData = {
         applicant: document.getElementById('applicant').value,
         email: emailVal,
         chineseName: document.getElementById('chineseName').value,
         englishName: document.getElementById('englishName').value,
-        quantity: document.getElementById('quantity').value,
-        category: document.getElementById('category').value,
+        quantity: qty + ' ' + unt,
+        category: selectedCategory,
         concentration: document.getElementById('concentration').value,
         volume: document.getElementById('volume').value,
         usageTime: document.getElementById('usageTime').value,
@@ -615,7 +663,7 @@
             document.getElementById('applicant').value = currentUserDisplayName || currentUserEmail.split('@')[0];
             // 重設唯讀 Email 欄位值
             document.getElementById('email').value = currentUserEmail;
-            toggleConcentration();
+            toggleCategoryFields();
             removeImage(); // 清除圖片預覽
           }
           const submitBtn = document.getElementById('submitBtn');
@@ -729,6 +777,16 @@
       }
     }
 
+    // 日期格式化補助：僅保留 YYYY-MM-DD
+    function formatDateOnly(str) {
+      if (!str) return '';
+      if (typeof str !== 'string') str = String(str);
+      var trimmed = str.trim();
+      if (trimmed.includes(' ')) return trimmed.split(' ')[0];
+      if (trimmed.includes('T')) return trimmed.split('T')[0];
+      return trimmed;
+    }
+
     // 動態年份篩選下拉選單載入
     function populateYearFilters(data, selectId) {
       const select = document.getElementById(selectId);
@@ -819,7 +877,7 @@
 
         html += `
           <tr class="hover:bg-slate-50 border-b border-slate-100">
-            <td class="p-3 text-xs whitespace-nowrap">${item.timestamp}</td>
+            <td class="p-3 text-xs whitespace-nowrap">${formatDateOnly(item.timestamp)}</td>
             <td class="p-3"><span class="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700">${item.subject}</span></td>
             <td class="p-3 font-medium text-slate-900">${item.chineseName}</td>
             <td class="p-3 text-xs">${item.englishName} ${item.concentration && item.concentration !== '無' ? '<br><span class="text-slate-400">濃度:' + item.concentration + '</span>' : ''}${item.volume && item.volume !== '無' ? '<br><span class="text-slate-400">容量:' + item.volume + '</span>' : ''}</td>
@@ -918,11 +976,14 @@
       let html = '';
       pageItems.forEach(function (item) {
         let statusSelect = `
-          <select onchange="updateStatus(${item.rowNumber}, this.value)" class="rounded border p-1 text-xs bg-white focus:outline-none">
-            <option value="未請購" ${item.status === '未請購' ? 'selected' : ''}>未請購</option>
-            <option value="已請購" ${item.status === '已請購' ? 'selected' : ''}>已請購</option>
-            <option value="不通過" ${item.status === '不通過' ? 'selected' : ''}>不通過</option>
-          </select>
+          <div class="flex items-center space-x-1 justify-center">
+            <select id="status-select-${item.rowNumber}" class="rounded border p-1 text-xs bg-white focus:outline-none">
+              <option value="未請購" ${item.status === '未請購' ? 'selected' : ''}>未請購</option>
+              <option value="已請購" ${item.status === '已請購' ? 'selected' : ''}>已請購</option>
+              <option value="不通過" ${item.status === '不通過' ? 'selected' : ''}>不通過</option>
+            </select>
+            <button onclick="updateStatus(${item.rowNumber}, document.getElementById('status-select-${item.rowNumber}').value)" class="px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 transition shadow-sm">更新</button>
+          </div>
         `;
 
         let photoLink = item.photoUrl !== '無照片'
@@ -931,7 +992,7 @@
 
         html += `
           <tr class="hover:bg-slate-50 border-b border-slate-100">
-            <td class="p-3 text-xs whitespace-nowrap">${item.timestamp}</td>
+            <td class="p-3 text-xs whitespace-nowrap">${formatDateOnly(item.timestamp)}</td>
             <td class="p-3"><span class="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700">${item.subject}</span></td>
             <td class="p-3 font-medium text-slate-900">${item.chineseName}</td>
             <td class="p-3 text-xs">${item.englishName} ${item.concentration && item.concentration !== '無' ? '<br><span class="text-slate-400">濃度:' + item.concentration + '</span>' : ''}${item.volume && item.volume !== '無' ? '<br><span class="text-slate-400">容量:' + item.volume + '</span>' : ''}</td>

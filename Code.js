@@ -146,8 +146,10 @@ function submitApplication(formData) {
       var base64Data = splitData[1];
       var blob = Utilities.newBlob(Utilities.base64Decode(base64Data), contentType, formData.photoName);
 
-      // 建立檔案於雲端硬碟根目錄（實務上可指定 Folder ID）
-      var file = DriveApp.createFile(blob);
+      // 建立檔案於指定的雲端硬碟資料夾
+      var folderId = '0B4BxlK1u01jlfnZoU0xObGNVMkYwbWZDalNTd05CMTBhYUZxY0k4RjFKTlJ3VmNLMFVTRmM';
+      var folder = DriveApp.getFolderById(folderId);
+      var file = folder.createFile(blob);
       file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
       photoUrl = file.getUrl();
     }
@@ -189,6 +191,29 @@ function formatDateTime(val) {
     }
   } catch (e) { }
   return String(val);
+}
+
+// 格式化日期僅包含年月日 (yyyy-MM-dd)
+function formatDateOnly(val) {
+  if (!val) return "";
+  if (val instanceof Date) {
+    if (isNaN(val.getTime())) return "";
+    return Utilities.formatDate(val, "GMT+8", "yyyy-MM-dd");
+  }
+  try {
+    var d = new Date(val);
+    if (!isNaN(d.getTime())) {
+      return Utilities.formatDate(d, "GMT+8", "yyyy-MM-dd");
+    }
+  } catch (e) { }
+  var str = String(val).trim();
+  if (str.indexOf(' ') !== -1) {
+    str = str.split(' ')[0];
+  }
+  if (str.indexOf('T') !== -1) {
+    str = str.split('T')[0];
+  }
+  return str;
 }
 
 function mapSheetRow(row, index) {
@@ -245,7 +270,7 @@ function mapSheetRow(row, index) {
 
   return {
     rowNumber: index + 2,
-    timestamp: formatDateTime(row[0]),
+    timestamp: formatDateOnly(row[0]),
     chineseName: row[1] || '',
     englishName: row[2] || '',
     quantity: row[3] || 0,
@@ -261,6 +286,24 @@ function mapSheetRow(row, index) {
   };
 }
 
+function getSheetData() {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var sheet = ss.getSheetByName(SHEET_NAME);
+  if (!sheet) return [];
+
+  var data = sheet.getDataRange().getValues();
+  if (data.length <= 1) return []; // 只有標頭或空表
+
+  var rows = data.slice(1);
+
+  var mappedData = rows.map(function (row, index) {
+    return mapSheetRow(row, index);
+  });
+  
+  // 依照時間倒數列出
+  return mappedData.reverse();
+}
+
 // 供管理者介面讀取所有資料
 function getAdminData() {
   try {
@@ -269,18 +312,7 @@ function getAdminData() {
       throw new Error("權限不足：您的帳號無管理員權限！");
     }
 
-    var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    var sheet = ss.getSheetByName(SHEET_NAME);
-    if (!sheet) return [];
-
-    var data = sheet.getDataRange().getValues();
-    if (data.length <= 1) return []; // 只有標頭或空表
-
-    var rows = data.slice(1);
-
-    return rows.map(function (row, index) {
-      return mapSheetRow(row, index);
-    });
+    return getSheetData();
   } catch (error) {
     throw new Error(error.message || "載入資料失敗");
   }
@@ -294,20 +326,9 @@ function getUserData() {
       return [];
     }
 
-    var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    var sheet = ss.getSheetByName(SHEET_NAME);
-    if (!sheet) return [];
-
-    var data = sheet.getDataRange().getValues();
-    if (data.length <= 1) return []; // 只有標頭或空表
-
-    var rows = data.slice(1);
-
     var normalizedEmail = email.toLowerCase().trim();
 
-    return rows.map(function (row, index) {
-      return mapSheetRow(row, index);
-    }).filter(function (item) {
+    return getSheetData().filter(function (item) {
       return String(item.email || '').toLowerCase().trim() === normalizedEmail;
     });
   } catch (error) {
