@@ -210,24 +210,7 @@ function submitApplication(formData) {
       lock.releaseLock();
     }
 
-    // 發送通知信件給管理者
-    try {
-      var emailTo = "5501@fhsh.khc.edu.tw,5502@fhsh.khc.edu.tw";
-      var subject = "【自然學科請購系統】有新的請購申請 - " + applicant;
-      var body = "管理員您好，\n\n" +
-                 "系統剛收到一筆新的請購申請：\n\n" +
-                 "- 申請人：" + applicant + "\n" +
-                 "- 科別：" + formData.subject + "\n" +
-                 "- 物品名稱：" + formData.chineseName + "\n" +
-                 "- 數量：" + formData.quantity + "\n" +
-                 "- 備註：" + (formData.remark || '無') + "\n\n" +
-                 "請登入系統管理員後台查看詳細內容並進行處理。\n";
-                 
-      GmailApp.sendEmail(emailTo, subject, body);
-    } catch (emailError) {
-      // 忽略信件發送失敗，不影響表單儲存
-      console.error("發送信件失敗: " + emailError.toString());
-    }
+    // 寄信功能已依要求移除
 
     return { success: true, message: '資料與照片提交成功！' };
   } catch (error) {
