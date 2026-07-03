@@ -8,10 +8,70 @@
     body {
       font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif;
     }
+
+    dialog::backdrop {
+      background-color: rgba(15, 23, 42, 0.4);
+      backdrop-filter: blur(4px);
+    }
   </style>
 </head>
 
-<body class="bg-slate-50 min-h-screen text-slate-800">
+<body class="bg-slate-50 min-h-screen text-slate-800 flex flex-col">
+
+  <!-- 美化版自訂彈出視窗 (Modal) -->
+  <dialog id="custom-alert-dialog"
+    class="rounded-xl shadow-2xl border border-slate-200 p-0 max-w-sm w-full bg-white overflow-hidden transition-all duration-200 opacity-0 scale-95"
+    closedby="any" aria-labelledby="customAlertTitle">
+    <div class="p-6">
+      <div class="flex items-center space-x-3 mb-4">
+        <!-- 圓形驚嘆號/成功/錯誤圖標 -->
+        <div id="alert-icon-container"
+          class="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center bg-blue-100 text-blue-600">
+          <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+        </div>
+        <h3 id="customAlertTitle" class="text-lg font-bold text-slate-900">系統提示</h3>
+      </div>
+      <p id="custom-alert-message" class="text-sm text-slate-600 mb-6 whitespace-pre-wrap leading-relaxed"></p>
+      <div class="flex justify-end">
+        <button id="custom-alert-close-btn"
+          class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-semibold transition shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+          確定
+        </button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- 美化版自訂確認視窗 (Confirm Modal) -->
+  <dialog id="custom-confirm-dialog"
+    class="rounded-xl shadow-2xl border border-slate-200 p-0 max-w-sm w-full bg-white overflow-hidden transition-all duration-200 opacity-0 scale-95"
+    closedby="any" aria-labelledby="customConfirmTitle">
+    <div class="p-6">
+      <div class="flex items-center space-x-3 mb-4">
+        <!-- 圓形警告/詢問圖標 -->
+        <div class="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center bg-amber-100 text-amber-600">
+          <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <h3 id="customConfirmTitle" class="text-lg font-bold text-slate-900">請確認操作</h3>
+      </div>
+      <p id="custom-confirm-message" class="text-sm text-slate-600 mb-6 whitespace-pre-wrap leading-relaxed"></p>
+      <div class="flex justify-end space-x-2">
+        <button id="custom-confirm-cancel-btn"
+          class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md text-sm font-semibold transition border border-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-300">
+          取消
+        </button>
+        <button id="custom-confirm-ok-btn"
+          class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-semibold transition shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+          確定
+        </button>
+      </div>
+    </div>
+  </dialog>
 
   <!-- 全域載入遮罩 -->
   <div id="loading-overlay"
@@ -20,9 +80,14 @@
     <div class="text-slate-600 font-medium tracking-wide">正在驗證您的身分與權限，請稍候...</div>
   </div>
 
-  <nav class="bg-slate-900 text-white shadow-md">
+  <nav class="bg-slate-900 text-white shadow-md sticky top-0 z-50">
     <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row justify-between items-center py-3 sm:h-16 gap-3">
-      <div class="font-bold text-lg tracking-wider">自然科課程藥品/物品管理系統</div>
+      <div class="flex items-center space-x-3">
+        <!-- Logo 圖片，改用 Google Drive 縮圖快取 API 避免破圖 (sz=w150 限制寬度) -->
+        <img src="https://drive.google.com/thumbnail?id=16TS1lAniLvq61I7v3YGKBYgf0cjwos8j&sz=w150" alt="Logo"
+          class="h-8 w-auto object-contain">
+        <div class="font-bold text-lg tracking-wider">自然學科課程 藥品/物品 請購管理系統</div>
+      </div>
       <div class="flex space-x-2">
         <button id="btn-apply" onclick="switchView('apply')"
           class="px-3.5 py-1.5 rounded-md bg-blue-600 text-white font-medium shadow-sm hover:bg-blue-700 transition text-sm">
@@ -44,22 +109,21 @@
     </div>
   </nav>
 
-  <main class="max-w-7xl mx-auto px-4 py-8">
+  <main class="max-w-7xl mx-auto px-4 py-8 flex-grow w-full">
 
     <!-- 1. 請購表單頁面 -->
     <div id="view-apply" class="block max-w-2xl mx-auto bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-      <h2 class="text-xl font-bold text-slate-900 mb-6 border-b pb-3">課程化學藥品 / 物品申請表單</h2>
+      <h2 class="text-xl font-bold text-slate-900 mb-6 border-b pb-3">藥品 / 物品申請表單</h2>
 
       <!-- 說明文字 -->
       <div
         class="mb-6 bg-blue-50 border border-blue-200 text-blue-800 p-4 rounded-lg text-sm leading-relaxed shadow-sm">
-        <p class="font-bold mb-2 text-base text-blue-900">此表單僅供自然科課程實驗、科展及等能力競賽..等相關藥品、物品(1萬元以下) 申請單。</p>
+        <p class="font-bold mb-2 text-base text-blue-900">供自然學科課程實驗、科展及等能力競賽..等相關藥品、物品(1萬元以下) 申請</p>
         <ol class="list-decimal list-inside space-y-1.5 ml-1">
-          <li>一次填寫一個藥品或物品，如有多個藥品需求，請重複填寫。</li>
-          <li>高雄的化工材料行 不可能每樣都有，因此學校配合廠商也只能從台北拿貨。</li>
+          <li>一次填寫一個藥品或物品，如有多個需求，請重複填寫。</li>
           <li>請務必兩周前提出申請，以免延誤。</li>
-          <li>自然科專題課程的藥品物品需求，由於部分材料有獨特性，更不可能在一週內或更短時間就送達學校，請見諒。</li>
-          <li>實習實驗費還要供應 自然科探究實作 及常規實驗，這一年物價上漲的很恐怖，請老師節約使用。</li>
+          <li>自然學科專題課程的藥品物品需求，由於部分材料具獨特性，無法在一週內或更短時間就送達學校，敬請見諒。</li>
+          <li>實習實驗費還要供應自然學科探究實作及常規實驗，請老師節約使用。</li>
         </ol>
       </div>
 
@@ -94,7 +158,7 @@
         </div>
 
         <div>
-          <label class="block text-sm font-semibold text-slate-700 mb-1">藥品英文名稱 (含化學式、分子量) 或物品規格名稱 <span
+          <label class="block text-sm font-semibold text-slate-700 mb-1">藥品英文名稱 (含化學式、分子量) <span
               class="text-red-500">*</span></label>
           <input type="text" id="englishName" name="englishName" required
             class="w-full rounded-md border-slate-300 px-3 py-2 border focus:ring-2 focus:ring-blue-500 focus:outline-none  placeholder-yellow-600"
@@ -167,7 +231,7 @@
         <div>
           <label class="block text-sm font-semibold text-slate-700 mb-1">請勾選所需科別 <span
               class="text-red-500">*</span></label>
-          <div class="flex space-x-4 mt-2">
+          <div class="flex flex-wrap gap-4 mt-2">
             <label class="inline-flex items-center"><input type="radio" name="subject" value="物理" checked
                 class="text-blue-600 focus:ring-blue-500"><span class="ml-2">物理</span></label>
             <label class="inline-flex items-center"><input type="radio" name="subject" value="化學"
@@ -176,12 +240,19 @@
                 class="text-blue-600 focus:ring-blue-500"><span class="ml-2">生物</span></label>
             <label class="inline-flex items-center"><input type="radio" name="subject" value="地科"
                 class="text-blue-600 focus:ring-blue-500"><span class="ml-2">地科</span></label>
-            <label class="inline-flex items-center"><input type="radio" name="subject" value="自然科探究實作課程"
-                class="text-blue-600 focus:ring-blue-500"><span class="ml-2">自然科探究實作課程</span></label>
-            <label class="inline-flex items-center"><input type="radio" name="subject" value="自然科四科專題課程"
-                class="text-blue-600 focus:ring-blue-500"><span class="ml-2">自然科四科專題課程</span></label>
-            <p class="text-xs text-slate-500">跨科跑班選修(跨家政、國文等) 無法使用實習實驗費。經費用途無法對應，主計會有意見。</p>
+            <label class="inline-flex items-center"><input type="radio" name="subject" value="自然學科探究實作課程"
+                class="text-blue-600 focus:ring-blue-500"><span class="ml-2">自然學科探究實作課程</span></label>
+            <label class="inline-flex items-center"><input type="radio" name="subject" value="自然學科四科專題課程"
+                class="text-blue-600 focus:ring-blue-500"><span class="ml-2">自然學科四科專題課程</span></label>
           </div>
+          <p class="text-xs text-slate-500 mt-2">跨科跑班選修(跨家政、國文等) 無法使用實習實驗費。經費用途無法對應，主計會有意見。</p>
+        </div>
+
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 mb-1">備註</label>
+          <textarea id="remark" name="remark" rows="3"
+            class="w-full rounded-md border-slate-300 px-3 py-2 border focus:ring-2 focus:ring-blue-500 focus:outline-none placeholder-slate-400"
+            placeholder="若有其他特別需求、說明或規格，請在此填寫"></textarea>
         </div>
 
         <div>
@@ -248,6 +319,11 @@
               <option value="12">12 月</option>
             </select>
           </div>
+          <!-- 取消申請 -->
+          <button onclick="cancelSelectedRequests()"
+            class="px-3 py-1.5 bg-rose-50 text-rose-700 rounded border border-rose-200 hover:bg-rose-100 text-sm font-medium transition">
+            取消申請
+          </button>
           <!-- 重新整理 -->
           <button onclick="loadUserData()"
             class="px-3 py-1.5 bg-slate-100 text-slate-700 rounded border hover:bg-slate-200 text-sm font-medium transition">
@@ -260,14 +336,16 @@
         <table class="w-full text-left border-collapse text-sm">
           <thead>
             <tr class="bg-slate-100 border-b border-slate-200 text-slate-700 font-semibold">
+              <th class="p-3 w-10 text-center"><input type="checkbox" id="user-select-all"
+                  onclick="toggleSelectAllUsers(this.checked)"
+                  class="rounded border-slate-300 text-blue-600 focus:ring-blue-500"></th>
               <th class="p-3">時間戳記</th>
               <th class="p-3">科別</th>
-              <th class="p-3">中文名稱</th>
-              <th class="p-3">規格/英文名稱</th>
-              <th class="p-3 w-16 text-center">數量</th>
-              <th class="p-3 text-center">分類</th>
-              <th class="p-3 text-center">照片</th>
+              <th class="p-3">物品/藥品中文名稱</th>
+              <th class="p-3 w-16 text-center">所需數量</th>
+              <th class="p-3 text-center">物品分類/化學藥品狀態</th>
               <th class="p-3 text-center">是否請購</th>
+              <th class="p-3 text-center w-28">採購總價</th>
             </tr>
           </thead>
           <tbody id="userTableBody" class="divide-y divide-slate-100 text-slate-600">
@@ -325,6 +403,8 @@
               <option value="11">11 月</option>
               <option value="12">12 月</option>
             </select>
+            <input type="text" id="admin-filter-applicant" oninput="debouncedApplyAdminFilters()" placeholder="搜尋申請者"
+              class="rounded border border-slate-300 p-1.5 text-xs bg-white focus:outline-none w-28">
           </div>
           <!-- 重新整理 -->
           <button onclick="loadAdminData()"
@@ -340,13 +420,13 @@
             <tr class="bg-slate-100 border-b border-slate-200 text-slate-700 font-semibold">
               <th class="p-3">時間戳記</th>
               <th class="p-3">科別</th>
-              <th class="p-3">中文名稱</th>
-              <th class="p-3">規格/英文名稱</th>
-              <th class="p-3 w-16 text-center">數量</th>
-              <th class="p-3 text-center">分類</th>
+              <th class="p-3">物品/藥品中文名稱</th>
+              <th class="p-3 w-16 text-center">所需數量</th>
+              <th class="p-3 text-center">物品分類/化學藥品狀態</th>
               <th class="p-3">申請人</th>
-              <th class="p-3 text-center">照片</th>
               <th class="p-3 text-center">是否請購</th>
+              <th class="p-3 text-center w-28">採購總價</th>
+              <th class="p-3 text-center">操作</th>
             </tr>
           </thead>
           <tbody id="adminTableBody" class="divide-y divide-slate-100 text-slate-600">
@@ -378,7 +458,172 @@
 
   </main>
 
+  <!-- 頁尾 (Footer) -->
+  <footer
+    class="bg-slate-100 border-t border-slate-200 mt-auto py-3 text-center text-xs text-slate-500 font-medium sticky bottom-0 z-40 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+    <div
+      class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-center sm:space-x-4 space-y-1 sm:space-y-0">
+      <div class="text-slate-700 font-semibold tracking-wide text-sm">國立鳳新高級中學 &copy; National Feng-Hsin Senior High
+        School</div>
+      <div class="hidden sm:block text-slate-300">|</div>
+      <div>830038 高雄市鳳山區新富路257號</div>
+      <div class="hidden sm:block text-slate-300">|</div>
+      <div>總機：07-7658288．傳真：07-7658586</div>
+    </div>
+  </footer>
+
   <script>
+    // 覆寫瀏覽器預設的 alert 視窗，使用精美的客製化 Modal
+    window.alert = function (message) {
+      const dialog = document.getElementById('custom-alert-dialog');
+      if (!dialog) return;
+
+      const msgEl = document.getElementById('custom-alert-message');
+      const iconContainer = document.getElementById('alert-icon-container');
+      const closeBtn = document.getElementById('custom-alert-close-btn');
+
+      // 判斷提示性質，切換對應色系與 SVG 圖標
+      const msgStr = String(message);
+      if (msgStr.indexOf('失敗') !== -1 || msgStr.indexOf('錯誤') !== -1 || msgStr.indexOf('無法') !== -1) {
+        iconContainer.className = "flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center bg-rose-100 text-rose-600 animate-pulse";
+        iconContainer.innerHTML = `
+          <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        `;
+      } else if (msgStr.indexOf('成功') !== -1) {
+        iconContainer.className = "flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center bg-emerald-100 text-emerald-600";
+        iconContainer.innerHTML = `
+          <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+          </svg>
+        `;
+      } else {
+        iconContainer.className = "flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center bg-amber-100 text-amber-600";
+        iconContainer.innerHTML = `
+          <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+        `;
+      }
+
+      msgEl.textContent = message;
+
+      // 顯示 Dialog 並加入轉場動畫
+      dialog.showModal();
+      dialog.classList.remove('opacity-0', 'scale-95');
+      dialog.classList.add('opacity-100', 'scale-100');
+
+      const closeDialog = function () {
+        dialog.classList.remove('opacity-100', 'scale-100');
+        dialog.classList.add('opacity-0', 'scale-95');
+        setTimeout(() => {
+          dialog.close();
+        }, 200);
+      };
+
+      closeBtn.onclick = closeDialog;
+
+      // 點擊 Backdrop 時也可關閉 (未支援 closedby 瀏覽器之 Fallback 處理)
+      if (!('closedBy' in HTMLDialogElement.prototype)) {
+        dialog.onclick = function (event) {
+          if (event.target !== dialog) return;
+          const rect = dialog.getBoundingClientRect();
+          const isDialogContent = (
+            rect.top <= event.clientY &&
+            event.clientY <= rect.top + rect.height &&
+            rect.left <= event.clientX &&
+            event.clientX <= rect.left + rect.width
+          );
+          if (!isDialogContent) {
+            closeDialog();
+          }
+        };
+      }
+    };
+
+    // 美化版自訂 confirm 視窗 (回傳 Promise)
+    window.showConfirm = function (message) {
+      return new Promise((resolve) => {
+        const dialog = document.getElementById('custom-confirm-dialog');
+        if (!dialog) {
+          resolve(false);
+          return;
+        }
+
+        const msgEl = document.getElementById('custom-confirm-message');
+        const okBtn = document.getElementById('custom-confirm-ok-btn');
+        const cancelBtn = document.getElementById('custom-confirm-cancel-btn');
+
+        msgEl.textContent = message;
+
+        // 顯示 Dialog 並加入轉場動畫
+        dialog.showModal();
+        dialog.classList.remove('opacity-0', 'scale-95');
+        dialog.classList.add('opacity-100', 'scale-100');
+
+        const closeWithResult = function (result) {
+          dialog.classList.remove('opacity-100', 'scale-100');
+          dialog.classList.add('opacity-0', 'scale-95');
+          setTimeout(() => {
+            dialog.close();
+            resolve(result);
+          }, 200);
+        };
+
+        okBtn.onclick = () => closeWithResult(true);
+        cancelBtn.onclick = () => closeWithResult(false);
+
+        // 點擊 Backdrop 時視同取消 (Fallback 處理)
+        if (!('closedBy' in HTMLDialogElement.prototype)) {
+          dialog.onclick = function (event) {
+            if (event.target !== dialog) return;
+            const rect = dialog.getBoundingClientRect();
+            const isDialogContent = (
+              rect.top <= event.clientY &&
+              event.clientY <= rect.top + rect.height &&
+              rect.left <= event.clientX &&
+              event.clientX <= rect.left + rect.width
+            );
+            if (!isDialogContent) {
+              closeWithResult(false);
+            }
+          };
+        }
+      });
+    };
+
+    // 共用防抖函數 (Debounce)
+    function debounce(func, wait) {
+      let timeout;
+      return function (...args) {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(this, args), wait);
+      };
+    }
+
+    // DOM 元素快取 (DOM Element Caching)
+    const DOM = {};
+
+    function initDOM() {
+      const ids = [
+        'photoFile', 'paste-zone', 'preview-container', 'upload-prompt', 'image-preview',
+        'adminTableBody', 'admin-page-info', 'admin-filter-year', 'admin-filter-month', 'admin-filter-applicant',
+        'userTableBody', 'user-page-info', 'user-filter-year', 'user-filter-month',
+        'view-apply', 'view-user-list', 'view-admin',
+        'btn-apply', 'btn-user-list', 'btn-admin',
+        'login-warning', 'submitBtn', 'btn-login-logout', 'email', 'applicant'
+      ];
+      ids.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+          // 將 kebab-case 轉為 camelCase 作為屬性名稱
+          const camelKey = id.replace(/-([a-z])/g, (g) => g[1].toUpperCase());
+          DOM[camelKey] = el;
+        }
+      });
+    }
+
     // 全域權限狀態
     let currentUserEmail = '';
     let currentUserDisplayName = '';
@@ -514,7 +759,7 @@
           }, 8 * 60 * 1000);
         }
 
-        loginWarning.classList.remove('hidden');
+        DOM.loginWarning.classList.remove('hidden');
         document.getElementById('login-warning-title').innerText = '提示：需登入後才能送出請購';
         document.getElementById('login-warning-desc').innerText = '目前為唯讀瀏覽狀態。您必須點擊右上方的「登入」按鈕，並使用學校 @fhsh.khc.edu.tw 帳號後才能填寫並送出請購申請。';
 
@@ -530,13 +775,13 @@
 
     // 切換三大畫面
     function switchView(view) {
-      const viewApply = document.getElementById('view-apply');
-      const viewUserList = document.getElementById('view-user-list');
-      const viewAdmin = document.getElementById('view-admin');
+      const viewApply = DOM.viewApply;
+      const viewUserList = DOM.viewUserList;
+      const viewAdmin = DOM.viewAdmin;
 
-      const btnApply = document.getElementById('btn-apply');
-      const btnUserList = document.getElementById('btn-user-list');
-      const btnAdmin = document.getElementById('btn-admin');
+      const btnApply = DOM.btnApply;
+      const btnUserList = DOM.btnUserList;
+      const btnAdmin = DOM.btnAdmin;
 
       // 隱藏所有面板
       viewApply.classList.add('hidden');
@@ -639,6 +884,7 @@
         volume: document.getElementById('volume').value,
         usageTime: document.getElementById('usageTime').value,
         subject: document.querySelector('input[name="subject"]:checked').value,
+        remark: document.getElementById('remark').value,
         photoBase64: null,
         photoName: null
       };
@@ -683,8 +929,10 @@
 
     /* ---------------- 圖片貼上與預覽邏輯 ---------------- */
     document.addEventListener('DOMContentLoaded', function () {
-      const fileInput = document.getElementById('photoFile');
-      const pasteZone = document.getElementById('paste-zone');
+      initDOM();
+
+      const fileInput = DOM.photoFile;
+      const pasteZone = DOM.pasteZone;
 
       // 點擊選擇檔案後的變更事件
       fileInput.addEventListener('change', function (e) {
@@ -832,64 +1080,71 @@
         .getUserData();
     }
 
+    // 共用日期過濾輔助函數
+    function filterByDate(item, year, month) {
+      if (!item.timestamp) return false;
+      const parts = item.timestamp.split('-');
+      const matchYear = !year || parts[0] === year;
+      const matchMonth = !month || parts[1] === month;
+      return matchYear && matchMonth;
+    }
+
     function applyUserFilters() {
-      const year = document.getElementById('user-filter-year').value;
-      const month = document.getElementById('user-filter-month').value;
+      const year = DOM.userFilterYear.value;
+      const month = DOM.userFilterMonth.value;
 
-      filteredUserData = rawUserData.filter(function (item) {
-        if (!item.timestamp) return false;
-        const parts = item.timestamp.split('-');
-        const itemYear = parts[0];
-        const itemMonth = parts[1]; // "MM"
-
-        const matchYear = !year || itemYear === year;
-        const matchMonth = !month || itemMonth === month;
-        return matchYear && matchMonth;
-      });
+      filteredUserData = rawUserData.filter(item => filterByDate(item, year, month));
 
       userCurrentPage = 1;
       renderUserTable();
     }
 
     function renderUserTable() {
-      const tbody = document.getElementById('userTableBody');
+      const tbody = DOM.userTableBody;
       const totalItems = filteredUserData.length;
+      const totalPages = Math.ceil(totalItems / userPageSize) || 1;
 
-      if (totalItems === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" class="p-4 text-center text-slate-400">目前尚無符合的申請紀錄</td></tr>';
-        document.getElementById('user-page-info').textContent = '第 0 / 0 頁';
-        document.getElementById('btn-user-prev').disabled = true;
-        document.getElementById('btn-user-next').disabled = true;
-        return;
-      }
-
-      const totalPages = Math.ceil(totalItems / userPageSize);
       if (userCurrentPage > totalPages) userCurrentPage = totalPages;
       if (userCurrentPage < 1) userCurrentPage = 1;
+
+      DOM.userPageInfo.textContent = `第 ${userCurrentPage} / ${totalPages} 頁 (共 ${totalItems} 筆)`;
 
       const startIdx = (userCurrentPage - 1) * userPageSize;
       const endIdx = Math.min(startIdx + userPageSize, totalItems);
       const pageItems = filteredUserData.slice(startIdx, endIdx);
 
+      // 重設全選勾選框狀態
+      const selectAllCheckbox = document.getElementById('user-select-all');
+      if (selectAllCheckbox) selectAllCheckbox.checked = false;
+
       let html = '';
+      let pageSum = 0;
       pageItems.forEach(function (item) {
-        let photoLink = item.photoUrl !== '無照片'
-          ? `<a href="${item.photoUrl}" target="_blank" class="text-blue-600 hover:underline font-medium">檢視照片</a>`
-          : `<span class="text-slate-400">無</span>`;
+        const priceVal = parseFloat(item.totalPrice) || 0;
+        pageSum += priceVal;
 
         html += `
-          <tr class="hover:bg-slate-50 border-b border-slate-100">
+          <tr class="hover:bg-slate-50 border-b border-slate-100" title="備註: ${item.remark || '無'}">
+            <td class="p-3 text-center"><input type="checkbox" class="user-row-checkbox rounded border-slate-300 text-blue-600 focus:ring-blue-500" value="${item.rowNumber}"></td>
             <td class="p-3 text-xs whitespace-nowrap">${formatDateOnly(item.timestamp)}</td>
             <td class="p-3"><span class="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700">${item.subject}</span></td>
             <td class="p-3 font-medium text-slate-900">${item.chineseName}</td>
-            <td class="p-3 text-xs">${item.englishName} ${item.concentration && item.concentration !== '無' ? '<br><span class="text-slate-400">濃度:' + item.concentration + '</span>' : ''}${item.volume && item.volume !== '無' ? '<br><span class="text-slate-400">容量:' + item.volume + '</span>' : ''}</td>
             <td class="p-3 text-center font-semibold text-slate-800">${item.quantity}</td>
             <td class="p-3 text-center text-xs whitespace-nowrap">${item.category}</td>
-            <td class="p-3 text-center text-xs whitespace-nowrap">${photoLink}</td>
             <td class="p-3 text-center">${getStatusBadge(item.status)}</td>
+            <td class="p-3 text-center text-rose-600 font-medium">${item.totalPrice ? item.totalPrice + ' 元' : '無'}</td>
           </tr>
         `;
       });
+
+      // 加上本頁總價加總列 (現在包含勾選框共有 8 欄，所以 colspan 為 7)
+      html += `
+        <tr class="bg-slate-100 font-semibold text-slate-900 border-t border-slate-200">
+          <td colspan="7" class="p-3 text-right">本頁採購總價加總：</td>
+          <td class="p-3 text-center text-rose-600">${pageSum} 元</td>
+        </tr>
+      `;
+
       tbody.innerHTML = html;
 
       document.getElementById('user-page-info').textContent = `第 ${userCurrentPage} / ${totalPages} 頁 (共 ${totalItems} 筆)`;
@@ -937,26 +1192,36 @@
     }
 
     function applyAdminFilters() {
-      const year = document.getElementById('admin-filter-year').value;
-      const month = document.getElementById('admin-filter-month').value;
+      const year = DOM.adminFilterYear.value;
+      const month = DOM.adminFilterMonth.value;
+      const applicantKeyword = DOM.adminFilterApplicant.value.toLowerCase().trim();
 
       filteredAdminData = rawAdminData.filter(function (item) {
-        if (!item.timestamp) return false;
-        const parts = item.timestamp.split('-');
-        const itemYear = parts[0];
-        const itemMonth = parts[1];
+        if (!filterByDate(item, year, month)) return false;
 
-        const matchYear = !year || itemYear === year;
-        const matchMonth = !month || itemMonth === month;
-        return matchYear && matchMonth;
+        const matchApplicant = !applicantKeyword ||
+          String(item.applicant || '').toLowerCase().indexOf(applicantKeyword) !== -1 ||
+          String(item.email || '').toLowerCase().indexOf(applicantKeyword) !== -1;
+
+        return matchApplicant;
       });
 
       adminCurrentPage = 1;
       renderAdminTable();
     }
 
+    const debouncedApplyAdminFilters = debounce(applyAdminFilters, 300);
+
+    function handleUpdateClick(rowNumber) {
+      const statusSelect = document.getElementById(`status-select-${rowNumber}`);
+      const priceInput = document.getElementById(`price-input-${rowNumber}`);
+      if (statusSelect && priceInput) {
+        updateStatus(rowNumber, statusSelect.value, priceInput.value);
+      }
+    }
+
     function renderAdminTable() {
-      const tbody = document.getElementById('adminTableBody');
+      const tbody = DOM.adminTableBody;
       const totalItems = filteredAdminData.length;
 
       if (totalItems === 0) {
@@ -978,13 +1243,12 @@
       let html = '';
       pageItems.forEach(function (item) {
         let statusSelect = `
-          <div class="flex items-center space-x-1 justify-center">
+          <div class="flex items-center justify-center">
             <select id="status-select-${item.rowNumber}" class="rounded border p-1 text-xs bg-white focus:outline-none">
               <option value="未請購" ${item.status === '未請購' ? 'selected' : ''}>未請購</option>
               <option value="已請購" ${item.status === '已請購' ? 'selected' : ''}>已請購</option>
               <option value="不通過" ${item.status === '不通過' ? 'selected' : ''}>不通過</option>
             </select>
-            <button onclick="updateStatus(${item.rowNumber}, document.getElementById('status-select-${item.rowNumber}').value)" class="px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 transition shadow-sm">更新</button>
           </div>
         `;
 
@@ -993,22 +1257,28 @@
           : `<span class="text-slate-400">無</span>`;
 
         html += `
-          <tr class="hover:bg-slate-50 border-b border-slate-100">
+          <tr class="hover:bg-slate-50 border-b border-slate-100" title="備註: ${item.remark || '無'}">
             <td class="p-3 text-xs whitespace-nowrap">${formatDateOnly(item.timestamp)}</td>
             <td class="p-3"><span class="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700">${item.subject}</span></td>
             <td class="p-3 font-medium text-slate-900">${item.chineseName}</td>
-            <td class="p-3 text-xs">${item.englishName} ${item.concentration && item.concentration !== '無' ? '<br><span class="text-slate-400">濃度:' + item.concentration + '</span>' : ''}${item.volume && item.volume !== '無' ? '<br><span class="text-slate-400">容量:' + item.volume + '</span>' : ''}</td>
             <td class="p-3 text-center font-semibold text-slate-800">${item.quantity}</td>
             <td class="p-3 text-center text-xs whitespace-nowrap">${item.category}</td>
             <td class="p-3 text-xs">${item.applicant || ''}<br><span class="text-slate-400">${item.email || ''}</span></td>
-            <td class="p-3 text-center text-xs whitespace-nowrap">${photoLink}</td>
             <td class="p-3 text-center">${statusSelect}</td>
+            <td class="p-3 text-center">
+              <input type="text" id="price-input-${item.rowNumber}" value="${item.totalPrice || ''}" placeholder="元" 
+                class="w-20 border rounded px-1.5 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-blue-500">
+            </td>
+            <td class="p-3 text-center">
+              <button onclick="handleUpdateClick(${item.rowNumber})" 
+                class="px-2.5 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 transition shadow-sm font-medium">更新</button>
+            </td>
           </tr>
         `;
       });
       tbody.innerHTML = html;
 
-      document.getElementById('admin-page-info').textContent = `第 ${adminCurrentPage} / ${totalPages} 頁 (共 ${totalItems} 筆)`;
+      DOM.adminPageInfo.textContent = `第 ${adminCurrentPage} / ${totalPages} 頁 (共 ${totalItems} 筆)`;
       document.getElementById('btn-admin-prev').disabled = (adminCurrentPage === 1);
       document.getElementById('btn-admin-next').disabled = (adminCurrentPage === totalPages);
     }
@@ -1034,8 +1304,8 @@
       }
     }
 
-    // 更新狀態
-    function updateStatus(rowNumber, newStatus) {
+    // 更新狀態與採購總價
+    function updateStatus(rowNumber, newStatus, totalPrice) {
       google.script.run
         .withSuccessHandler(function (res) {
           if (res.success) {
@@ -1043,18 +1313,67 @@
             const item = rawAdminData.find(i => i.rowNumber === rowNumber);
             if (item) {
               item.status = newStatus;
+              item.totalPrice = totalPrice;
             }
             renderAdminTable();
           } else {
-            alert('狀態更新失敗：' + (res.message || '未知錯誤'));
+            alert('狀態與金額更新失敗：' + (res.message || '未知錯誤'));
             loadAdminData(); // 失敗則重載
           }
         })
         .withFailureHandler(function (err) {
-          alert('連線失敗，狀態未更新：' + err.message);
+          alert('連線失敗，更新未成功：' + err.message);
           loadAdminData(); // 失敗則重載
         })
-        .updateProcurementStatus(rowNumber, newStatus);
+        .updateProcurementStatus(rowNumber, newStatus, totalPrice);
+    }
+
+    // 全選/全不選使用者列表勾選框
+    function toggleSelectAllUsers(isChecked) {
+      const checkboxes = document.querySelectorAll('.user-row-checkbox');
+      checkboxes.forEach(cb => cb.checked = isChecked);
+    }
+
+    // 取消（刪除）所勾選的請購項目
+    async function cancelSelectedRequests() {
+      const checkboxes = document.querySelectorAll('.user-row-checkbox:checked');
+      if (checkboxes.length === 0) {
+        alert('請先勾選要取消的請購項目！');
+        return;
+      }
+
+      const rowNumbers = Array.from(checkboxes).map(cb => parseInt(cb.value));
+
+      const isConfirmed = await showConfirm(`您確定要取消這 ${rowNumbers.length} 筆請購項目嗎？此動作將會從資料庫中永久刪除！`);
+      if (isConfirmed) {
+        const cancelBtn = document.querySelector('button[onclick="cancelSelectedRequests()"]');
+        if (cancelBtn) {
+          cancelBtn.disabled = true;
+          cancelBtn.textContent = '處理中...';
+        }
+
+        google.script.run
+          .withSuccessHandler(function (res) {
+            if (cancelBtn) {
+              cancelBtn.disabled = false;
+              cancelBtn.textContent = '取消申請';
+            }
+            if (res.success) {
+              alert('成功取消請購申請！');
+              loadUserData();
+            } else {
+              alert('取消失敗：' + (res.message || '未知錯誤'));
+            }
+          })
+          .withFailureHandler(function (err) {
+            if (cancelBtn) {
+              cancelBtn.disabled = false;
+              cancelBtn.textContent = '取消申請';
+            }
+            alert('連線失敗，取消未成功：' + err.message);
+          })
+          .deleteUserRequests(rowNumbers);
+      }
     }
   </script>
 </body>

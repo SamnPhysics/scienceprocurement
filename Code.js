@@ -1,3 +1,5 @@
+
+//物品藥品採購表單的填答試算表
 const SPREADSHEET_ID = '19kPC7jyRhmWXzy6gdkVQQTXUvwwdlPvlRzy15JtPvnA';
 const SHEET_NAME = '表單回應 1';
 const ADMIN_EMAILS = ['5501@fhsh.khc.edu.tw', '5502@fhsh.khc.edu.tw'];
@@ -46,7 +48,13 @@ function authCallback(request) {
       '<p>系統將在 1 秒後自動為您重新導向...</p>' +
       '<p style="margin-top: 1rem; font-size: 0.9em; color: #666;">若沒有自動跳轉，請 <a id="manual-link" href="' + appUrl + '" target="_top" style="color: #2563eb; text-decoration: underline;">點擊此處回到系統</a>。</p>' +
       '<script>' +
-      '  setTimeout(function() { window.top.location.href = "' + appUrl + '"; }, 1000);' +
+      '  setTimeout(function() { ' +
+      '    try { ' +
+      '      document.getElementById("manual-link").click(); ' +
+      '    } catch (err) { ' +
+      '      window.open("' + appUrl + '", "_top"); ' +
+      '    } ' +
+      '  }, 1000);' +
       '</script>' +
       '</div>'
     );
@@ -68,24 +76,41 @@ function logoutOAuth() {
 
 function getOAuthProfile() {
   var service = getOAuthService();
-  if (service.hasAccess()) {
-    try {
-      var url = 'https://www.googleapis.com/oauth2/v2/userinfo';
-      var response = UrlFetchApp.fetch(url, {
-        headers: {
-          Authorization: 'Bearer ' + service.getAccessToken()
-        }
-      });
-      var profile = JSON.parse(response.getContentText()) || {};
-      return {
-        email: profile.email || '',
-        displayName: profile.name || ''
-      };
-    } catch (e) {
-      return { email: '', displayName: '' };
-    }
+  if (!service.hasAccess()) {
+    return { email: '', displayName: '' };
   }
-  return { email: '', displayName: '' };
+
+  var token = service.getAccessToken();
+  var cache = CacheService.getUserCache();
+  // 使用 token 後綴當作快取 key，避免超過 Cache Key 長度限制 (250 chars)
+  var cacheKey = 'oauth_profile_' + token.substring(token.length - 20);
+
+  var cachedProfile = cache.get(cacheKey);
+  if (cachedProfile) {
+    try {
+      return JSON.parse(cachedProfile);
+    } catch (e) { }
+  }
+
+  try {
+    var url = 'https://www.googleapis.com/oauth2/v2/userinfo';
+    var response = UrlFetchApp.fetch(url, {
+      headers: {
+        Authorization: 'Bearer ' + token
+      }
+    });
+    var profile = JSON.parse(response.getContentText()) || {};
+    var result = {
+      email: profile.email || '',
+      displayName: profile.name || ''
+    };
+
+    // 快取 1 小時 (3600 秒)
+    cache.put(cacheKey, JSON.stringify(result), 3600);
+    return result;
+  } catch (e) {
+    return { email: '', displayName: '' };
+  }
 }
 
 function getOAuthEmail() {
@@ -132,8 +157,8 @@ function submitApplication(formData) {
       sheet.appendRow([
         '時間戳記', '物品/藥品中文名稱', '藥品英文名稱(含化學式，分子量)或物品名稱',
         '所需數量', '物品分類/化學藥品狀態', '藥品濃度(液態)',
-        '課程使用時間', '請勾選所需科別', '申請人','電子郵件地址',
-        '物品/藥品照片', '藥品容量(液態)','是否請購'
+        '課程使用時間', '請勾選所需科別', '申請人', '電子郵件地址',
+        '物品/藥品照片', '藥品容量(液態)', '是否請購', '備註', '採購總價'
       ]);
     }
 
@@ -154,22 +179,55 @@ function submitApplication(formData) {
       photoUrl = file.getUrl();
     }
 
-    // 寫入資料列
-    sheet.appendRow([
-      new Date(),
-      formData.chineseName,
-      formData.englishName,
-      formData.quantity,
-      formData.category,
-      formData.concentration || '無',
-      formData.usageTime,
-      formData.subject,
-      applicant,
-      formData.email,
-      photoUrl,
-      formData.volume || '無',
-      '未請購' // 預設初始狀態
-    ]);
+    var lock = LockService.getScriptLock();
+    if (!lock.tryLock(15000)) {
+      return { success: false, message: '提交失敗：系統目前忙碌中，請稍後再試。' };
+    }
+
+    try {
+      // 寫入資料列
+      sheet.appendRow([
+        new Date(),
+        formData.chineseName,
+        formData.englishName,
+        formData.quantity,
+        formData.category,
+        formData.concentration || '無',
+        formData.usageTime,
+        formData.subject,
+        applicant,
+        formData.email,
+        photoUrl,
+        formData.volume || '無',
+        '未請購', // 預設初始狀態
+        formData.remark || '',
+        '' // 初始採購總價為空
+      ]);
+
+      // 資料更新後，清除快取
+      CacheService.getScriptCache().remove('sheet_data_cache');
+    } finally {
+      lock.releaseLock();
+    }
+
+    // 發送通知信件給管理者
+    try {
+      var emailTo = "5501@fhsh.khc.edu.tw,5502@fhsh.khc.edu.tw";
+      var subject = "【自然學科請購系統】有新的請購申請 - " + applicant;
+      var body = "管理員您好，\n\n" +
+                 "系統剛收到一筆新的請購申請：\n\n" +
+                 "- 申請人：" + applicant + "\n" +
+                 "- 科別：" + formData.subject + "\n" +
+                 "- 物品名稱：" + formData.chineseName + "\n" +
+                 "- 數量：" + formData.quantity + "\n" +
+                 "- 備註：" + (formData.remark || '無') + "\n\n" +
+                 "請登入系統管理員後台查看詳細內容並進行處理。\n";
+                 
+      GmailApp.sendEmail(emailTo, subject, body);
+    } catch (emailError) {
+      // 忽略信件發送失敗，不影響表單儲存
+      console.error("發送信件失敗: " + emailError.toString());
+    }
 
     return { success: true, message: '資料與照片提交成功！' };
   } catch (error) {
@@ -216,77 +274,88 @@ function formatDateOnly(val) {
   return str;
 }
 
-function mapSheetRow(row, index) {
-  // 相容舊版 11 欄、新版 13 欄與過渡期間欄位錯位資料
+function mapSheetRow(row, index, colMap) {
+  colMap = colMap || {};
+  function getVal(colName, defaultIdx) {
+    var idx = colMap.hasOwnProperty(colName) ? colMap[colName] : defaultIdx;
+    return row[idx] !== undefined ? row[idx] : '';
+  }
+
+  var timestamp = getVal('時間戳記', 0);
+  var chineseName = getVal('物品/藥品中文名稱', 1);
+  var englishName = getVal('藥品英文名稱(含化學式，分子量)或物品名稱', 2);
+  var quantity = getVal('所需數量', 3);
+  var category = getVal('物品分類/化學藥品狀態', 4);
+  var concentration = getVal('藥品濃度(液態)', 5);
+  var usageTime = formatDateTime(getVal('課程使用時間', 6));
+  var subject = getVal('請勾選所需科別', 7);
+  var applicant = getVal('申請人', 8);
+  var email = getVal('電子郵件地址', 9);
+  var photoUrl = getVal('物品/藥品照片', 10);
+  var volume = getVal('藥品容量(液態)', 11);
+  var status = getVal('是否請購', 12) || '未請購';
+  var remark = getVal('備註', 13);
+  var totalPrice = getVal('採購總價', 14);
+
+  // === 保留相容舊版錯位資料的安全機制 ===
   var statusSet = { '未請購': true, '已請購': true, '不通過': true };
-  var c8 = row[8] || '';
-  var c9 = row[9] || '';
-  var c10 = row[10] || '';
-  var c11 = row[11] || '';
-  var c12 = row[12] || '';
+  function looksLikeEmail(v) { return typeof v === 'string' && v.indexOf('@') !== -1; }
+  function looksLikeUrl(v) { return typeof v === 'string' && /^https?:\/\//i.test(v); }
 
-  function looksLikeEmail(v) {
-    return typeof v === 'string' && v.indexOf('@') !== -1;
+  if (!looksLikeEmail(email)) {
+    if (looksLikeEmail(applicant)) { email = applicant; }
+    else if (looksLikeEmail(photoUrl)) { email = photoUrl; }
+    else if (looksLikeEmail(row[8])) { email = row[8]; }
   }
 
-  function looksLikeUrl(v) {
-    return typeof v === 'string' && /^https?:\/\//i.test(v);
+  if (photoUrl !== '無照片' && !looksLikeUrl(photoUrl)) {
+    if (looksLikeUrl(email)) { photoUrl = email; }
+    else if (looksLikeUrl(row[9])) { photoUrl = row[9]; }
+    else if (looksLikeUrl(row[10])) { photoUrl = row[10]; }
+    else { photoUrl = '無照片'; }
+  }
+  if (!photoUrl) photoUrl = '無照片';
+
+  if (!statusSet[status]) {
+    if (statusSet[row[12]]) status = row[12];
+    else if (statusSet[row[11]]) status = row[11];
+    else if (statusSet[row[10]]) status = row[10];
+    else status = '未請購';
   }
 
-  var email = '';
-  if (looksLikeEmail(c9)) {
-    email = c9;
-  } else if (looksLikeEmail(c8)) {
-    email = c8;
-  }
-
-  var applicant = '';
-  if (c8 && !looksLikeEmail(c8)) {
-    applicant = c8;
-  } else if (email) {
+  if (applicant === email || looksLikeEmail(applicant)) {
     applicant = String(email).split('@')[0];
-  }
-
-  var photoUrl = '無照片';
-  if (looksLikeUrl(c10)) {
-    photoUrl = c10;
-  } else if (looksLikeUrl(c9)) {
-    photoUrl = c9;
-  }
-
-  var volume = '';
-  if (c11 && !statusSet[c11] && !looksLikeEmail(c11) && !looksLikeUrl(c11)) {
-    volume = c11;
-  }
-
-  var status = '未請購';
-  if (statusSet[c12]) {
-    status = c12;
-  } else if (statusSet[c11]) {
-    status = c11;
-  } else if (statusSet[c10]) {
-    status = c10;
   }
 
   return {
     rowNumber: index + 2,
-    timestamp: formatDateOnly(row[0]),
-    chineseName: row[1] || '',
-    englishName: row[2] || '',
-    quantity: row[3] || 0,
-    category: row[4] || '',
-    concentration: row[5] || '',
-    usageTime: formatDateTime(row[6]),
-    subject: row[7] || '',
+    timestamp: formatDateOnly(timestamp),
+    chineseName: chineseName,
+    englishName: englishName,
+    quantity: quantity,
+    category: category,
+    concentration: concentration,
+    usageTime: usageTime,
+    subject: subject,
     applicant: applicant,
     email: email,
     photoUrl: photoUrl,
     volume: volume,
-    status: status
+    status: status,
+    remark: remark,
+    totalPrice: totalPrice
   };
 }
 
 function getSheetData() {
+  var cache = CacheService.getScriptCache();
+  var cachedData = cache.get('sheet_data_cache');
+  if (cachedData) {
+    try {
+      return JSON.parse(cachedData);
+    } catch (e) { }
+  }
+
   var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   var sheet = ss.getSheetByName(SHEET_NAME);
   if (!sheet) return [];
@@ -294,14 +363,27 @@ function getSheetData() {
   var data = sheet.getDataRange().getValues();
   if (data.length <= 1) return []; // 只有標頭或空表
 
+  var headers = data[0];
+  var colMap = {};
+  for (var i = 0; i < headers.length; i++) {
+    colMap[headers[i]] = i;
+  }
+
   var rows = data.slice(1);
 
   var mappedData = rows.map(function (row, index) {
-    return mapSheetRow(row, index);
+    return mapSheetRow(row, index, colMap);
   });
-  
+
   // 依照時間倒數列出
-  return mappedData.reverse();
+  var reversedData = mappedData.reverse();
+
+  try {
+    // 寫入快取 1 小時，最大限制約 100KB。若資料過大會引發例外，則忽略快取。
+    cache.put('sheet_data_cache', JSON.stringify(reversedData), 3600);
+  } catch (e) { }
+
+  return reversedData;
 }
 
 // 供管理者介面讀取所有資料
@@ -318,16 +400,13 @@ function getAdminData() {
   }
 }
 
-// 供使用者讀取個人申請紀錄
 function getUserData() {
   try {
     var email = getOAuthEmail();
     if (!email || !email.toLowerCase().endsWith('@fhsh.khc.edu.tw')) {
       return [];
     }
-
     var normalizedEmail = email.toLowerCase().trim();
-
     return getSheetData().filter(function (item) {
       return String(item.email || '').toLowerCase().trim() === normalizedEmail;
     });
@@ -336,8 +415,13 @@ function getUserData() {
   }
 }
 
-// 更新特定的請購狀態
-function updateProcurementStatus(rowNumber, newStatus) {
+// 更新特定的請購狀態與總價
+function updateProcurementStatus(rowNumber, newStatus, totalPrice) {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) {
+    return { success: false, message: '操作失敗：系統目前忙碌中，請稍後再試。' };
+  }
+
   try {
     var email = getOAuthEmail();
     if (!isAdminUser(email)) {
@@ -346,11 +430,79 @@ function updateProcurementStatus(rowNumber, newStatus) {
 
     var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     var sheet = ss.getSheetByName(SHEET_NAME);
-    // 「是否請購」位於第 13 欄 (M欄)
-    sheet.getRange(rowNumber, 13).setValue(newStatus);
+
+    // 動態找欄位索引
+    var headers = sheet.getRange(1, 1, 1, Math.max(15, sheet.getLastColumn())).getValues()[0];
+    var statusColIdx = headers.indexOf('是否請購') + 1;
+    var priceColIdx = headers.indexOf('採購總價') + 1;
+
+    // 萬一找不到表頭則使用預設值
+    if (statusColIdx === 0) statusColIdx = 13;
+    if (priceColIdx === 0) priceColIdx = 15;
+
+    sheet.getRange(rowNumber, statusColIdx).setValue(newStatus);
+    sheet.getRange(rowNumber, priceColIdx).setValue(totalPrice);
+
+    // 清除快取
+    CacheService.getScriptCache().remove('sheet_data_cache');
     return { success: true };
   } catch (error) {
     return { success: false, message: error.toString() };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// 供一般使用者刪除（取消）屬於自己的請購紀錄
+function deleteUserRequests(rowNumbers) {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) {
+    return { success: false, message: '系統目前忙碌中，請稍後再試。' };
+  }
+
+  try {
+    var email = getOAuthEmail();
+    if (!email || !email.toLowerCase().endsWith('@fhsh.khc.edu.tw')) {
+      return { success: false, message: '操作失敗：驗證身分失敗。' };
+    }
+
+    var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    var sheet = ss.getSheetByName(SHEET_NAME);
+
+    // 先讀取所有資料到記憶體以進行批量驗證，減少對 sheet.getRange 迴圈的依賴
+    var data = sheet.getDataRange().getValues();
+    if (data.length <= 1) return { success: false, message: '找不到資料表內容。' };
+
+    var headers = data[0];
+    var emailColIdx = headers.indexOf('電子郵件地址');
+    if (emailColIdx === -1) emailColIdx = 9; // Fallback to 0-indexed 9
+
+    // 由大到小排序，避免刪除列後導致後續列號錯位
+    rowNumbers.sort(function (a, b) { return b - a; });
+
+    for (var i = 0; i < rowNumbers.length; i++) {
+      var rowNum = rowNumbers[i];
+      if (rowNum < 2 || rowNum > data.length) {
+        throw new Error('無效的列號：' + rowNum);
+      }
+
+      // data 是 0-indexed，rowNum 是 1-indexed
+      var rowEmail = data[rowNum - 1][emailColIdx];
+
+      if (String(rowEmail).toLowerCase().trim() === email.toLowerCase().trim()) {
+        sheet.deleteRow(rowNum);
+      } else {
+        throw new Error('安全性錯誤：您無權刪除其他人的請購項目！');
+      }
+    }
+
+    // 清除快取
+    CacheService.getScriptCache().remove('sheet_data_cache');
+    return { success: true };
+  } catch (error) {
+    return { success: false, message: error.toString() };
+  } finally {
+    lock.releaseLock();
   }
 }
 
