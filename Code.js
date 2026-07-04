@@ -7,9 +7,29 @@ const SPREADSHEET_ID = '19kPC7jyRhmWXzy6gdkVQQTXUvwwdlPvlRzy15JtPvnA';
 const SHEET_NAME = '表單回應 1';
 const ADMIN_EMAILS = ['5501@fhsh.khc.edu.tw', '5502@fhsh.khc.edu.tw'];
 
+// 阻擋名單規則 (可以是正規表達式 RegExp，或是特定的 Email 字串)
+const BLOCKED_ACCOUNT_RULES = [
+  /^s?\d+@/i,  // 阻擋學生帳號 (判斷邏輯：信箱開頭為 's' 加上數字，或純數字)
+  // 'example@fhsh.khc.edu.tw' // 未來若要阻擋特定帳號，可直接加在這裡
+];
+
 function isAdminUser(email) {
   if (!email) return false;
   return ADMIN_EMAILS.indexOf(email.toLowerCase()) !== -1;
+}
+
+// 判斷是否為被阻擋的帳號
+function isBlockedUser(email) {
+  if (!email) return false;
+  for (var i = 0; i < BLOCKED_ACCOUNT_RULES.length; i++) {
+    var rule = BLOCKED_ACCOUNT_RULES[i];
+    if (rule instanceof RegExp) {
+      if (rule.test(email)) return true;
+    } else if (typeof rule === 'string') {
+      if (email.toLowerCase() === rule.toLowerCase()) return true;
+    }
+  }
+  return false;
 }
 
 // 供開發者在編輯器內手動執行，以觸發 Email 授權視窗
@@ -172,6 +192,11 @@ function getAuthStatus(token) {
       return { loggedIn: true, email: email, displayName: displayName, role: "invalid", message: "非學校網域帳號" };
     }
 
+    // 檢查是否在阻擋名單內
+    if (isBlockedUser(email)) {
+      return { loggedIn: true, email: email, displayName: displayName, role: "invalid", message: "您的帳號禁止使用本系統" };
+    }
+
     var role = isAdminUser(email) ? "admin" : "user";
     return { loggedIn: true, email: email, displayName: displayName, role: role, picture: profile.picture };
   } catch (e) {
@@ -188,6 +213,11 @@ function submitApplication(formData, token) {
     var email = profile.email;
     if (!email || !email.toLowerCase().endsWith('@fhsh.khc.edu.tw')) {
       return { success: false, message: '提交失敗：您必須登入學校網域帳號 (@fhsh.khc.edu.tw) 才能進行申請！' };
+    }
+
+    // 阻擋帳號防護 (後端二次檢查)
+    if (isBlockedUser(email)) {
+      return { success: false, message: '提交失敗：您的帳號禁止使用此系統！' };
     }
 
     // 安全考量：一律以後端獲取的登入 email 作為寫入值
