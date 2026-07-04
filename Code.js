@@ -9,7 +9,7 @@ const ADMIN_EMAILS = ['5501@fhsh.khc.edu.tw', '5502@fhsh.khc.edu.tw'];
 
 // 阻擋名單規則 (可以是正規表達式 RegExp，或是特定的 Email 字串)
 const BLOCKED_ACCOUNT_RULES = [
-  /^s?\d+@/i,  // 阻擋學生帳號 (判斷邏輯：信箱開頭為 's' 加上數字，或純數字)
+  /^\d{6}@/i,  // 阻擋學生帳號 (判斷邏輯：信箱開頭為 's' 加上數字，或純數字)
   // 'example@fhsh.khc.edu.tw' // 未來若要阻擋特定帳號，可直接加在這裡
 ];
 
@@ -287,7 +287,7 @@ function submitApplication(formData, token) {
     // 發送 Email 通知給管理者
     try {
       var subjectStr = "【新採購申請通知】" + formData.chineseName;
-      
+
       var bodyStr = "系統收到一筆新的藥品/物品採購申請：\n\n" +
         "申請人：" + applicant + "\n" +
         "科別：" + formData.subject + "\n" +

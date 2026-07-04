@@ -638,7 +638,10 @@
         'userTableBody', 'user-page-info', 'user-filter-year', 'user-filter-month',
         'view-apply', 'view-user-list', 'view-admin',
         'btn-apply', 'btn-user-list', 'btn-admin',
-        'login-warning', 'submitBtn', 'btn-login-logout', 'email', 'applicant'
+        'login-warning', 'submitBtn', 'btn-login-logout', 'email', 'applicant',
+        'category', 'otherCategory', 'concentration-block', 'concentration', 'volume', 'other-category-block',
+        'chineseName', 'englishName', 'quantity', 'unit', 'usageTime', 'remark', 'appForm',
+        'custom-tooltip', 'tooltip-remark', 'tooltip-photo-container', 'tooltip-photo', 'tooltip-no-photo'
       ];
       ids.forEach(id => {
         const el = document.getElementById(id);
@@ -757,9 +760,12 @@
 
           if (status.role === 'admin') {
             btnAdmin.classList.remove('hidden');
+            loadAdminData(true); // 背景預先載入管理者資料
           } else {
             btnAdmin.classList.add('hidden');
           }
+          
+          loadUserData(true); // 背景預先載入個人申請資料
         }
       } else {
         // 未登入：點擊按鈕開啟彈出視窗
@@ -836,11 +842,11 @@
       } else if (view === 'user-list') {
         viewUserList.classList.remove('hidden');
         activeBtn = btnUserList;
-        loadUserData();
+        // 已在背景預載，無需重複呼叫 loadUserData()
       } else if (view === 'admin') {
         viewAdmin.classList.remove('hidden');
         activeBtn = btnAdmin;
-        loadAdminData();
+        // 已在背景預載，無需重複呼叫 loadAdminData()
       }
 
       // 套用選取狀態樣式
@@ -852,10 +858,10 @@
 
     // 動態切換液態藥品濃度輸入格及自定義分類輸入格
     function toggleCategoryFields() {
-      const cat = document.getElementById('category').value;
-      const blockConc = document.getElementById('concentration-block');
-      const inputConc = document.getElementById('concentration');
-      const volumeInput = document.getElementById('volume');
+      const cat = DOM.category.value;
+      const blockConc = DOM.concentrationBlock;
+      const inputConc = DOM.concentration;
+      const volumeInput = DOM.volume;
 
       if (cat === '液態藥品') {
         blockConc.classList.remove('hidden');
@@ -869,8 +875,8 @@
         volumeInput.value = '';
       }
 
-      const blockOther = document.getElementById('other-category-block');
-      const inputOther = document.getElementById('otherCategory');
+      const blockOther = DOM.otherCategoryBlock;
+      const inputOther = DOM.otherCategory;
       if (cat === '其他') {
         blockOther.classList.remove('hidden');
         inputOther.required = true;
@@ -886,39 +892,39 @@
       e.preventDefault();
 
       // 前端二次安全防護：確認信箱網域
-      const emailVal = document.getElementById('email').value.toLowerCase();
+      const emailVal = DOM.email.value.toLowerCase();
       if (!emailVal.endsWith('@fhsh.khc.edu.tw')) {
         alert('請先登入 @fhsh.khc.edu.tw 帳號後再送出申請。');
         return;
       }
 
-      const submitBtn = document.getElementById('submitBtn');
+      const submitBtn = DOM.submitBtn;
       submitBtn.disabled = true;
       submitBtn.innerText = '處理中...請稍候';
 
-      const fileInput = document.getElementById('photoFile');
+      const fileInput = DOM.photoFile;
       const file = fileInput.files[0];
 
-      let selectedCategory = document.getElementById('category').value;
+      let selectedCategory = DOM.category.value;
       if (selectedCategory === '其他') {
-        selectedCategory = document.getElementById('otherCategory').value;
+        selectedCategory = DOM.otherCategory.value;
       }
 
-      const qty = document.getElementById('quantity').value;
-      const unt = document.getElementById('unit').value;
+      const qty = DOM.quantity.value;
+      const unt = DOM.unit.value;
 
       const formData = {
-        applicant: document.getElementById('applicant').value,
+        applicant: DOM.applicant.value,
         email: emailVal,
-        chineseName: document.getElementById('chineseName').value,
-        englishName: document.getElementById('englishName').value,
+        chineseName: DOM.chineseName.value,
+        englishName: DOM.englishName.value,
         quantity: qty + ' ' + unt,
         category: selectedCategory,
-        concentration: document.getElementById('concentration').value,
-        volume: document.getElementById('volume').value,
-        usageTime: document.getElementById('usageTime').value,
+        concentration: DOM.concentration.value,
+        volume: DOM.volume.value,
+        usageTime: DOM.usageTime.value,
         subject: document.querySelector('input[name="subject"]:checked').value,
-        remark: document.getElementById('remark').value,
+        remark: DOM.remark.value,
         photoBase64: null,
         photoName: null
       };
@@ -941,22 +947,20 @@
         .withSuccessHandler(function (response) {
           alert(response.message);
           if (response.success) {
-            document.getElementById('appForm').reset();
-            document.getElementById('applicant').value = currentUserDisplayName || currentUserEmail.split('@')[0];
+            DOM.appForm.reset();
+            DOM.applicant.value = currentUserDisplayName || currentUserEmail.split('@')[0];
             // 重設唯讀 Email 欄位值
-            document.getElementById('email').value = currentUserEmail;
+            DOM.email.value = currentUserEmail;
             toggleCategoryFields();
             removeImage(); // 清除圖片預覽
           }
-          const submitBtn = document.getElementById('submitBtn');
-          submitBtn.disabled = false;
-          submitBtn.innerText = '提交申請';
+          DOM.submitBtn.disabled = false;
+          DOM.submitBtn.innerText = '提交申請';
         })
         .withFailureHandler(function (err) {
           alert('提交失敗: ' + err);
-          const submitBtn = document.getElementById('submitBtn');
-          submitBtn.disabled = false;
-          submitBtn.innerText = '提交申請';
+          DOM.submitBtn.disabled = false;
+          DOM.submitBtn.innerText = '提交申請';
         })
         .submitApplication(formData, localStorage.getItem('my_app_token'));
     }
@@ -1018,6 +1022,20 @@
             alert('請上傳圖片格式的檔案！');
           }
         }
+      });
+      
+      // Tooltip Event Delegation
+      document.body.addEventListener('mouseover', function(e) {
+        const tr = e.target.closest('tr.tooltip-trigger');
+        if (tr) showCustomTooltip(tr);
+      });
+      document.body.addEventListener('mousemove', function(e) {
+        const tr = e.target.closest('tr.tooltip-trigger');
+        if (tr) moveCustomTooltip(e);
+      });
+      document.body.addEventListener('mouseout', function(e) {
+        const tr = e.target.closest('tr.tooltip-trigger');
+        if (tr && !tr.contains(e.relatedTarget)) hideCustomTooltip();
       });
     });
 
@@ -1098,9 +1116,11 @@
     }
 
     /* ---------------- 個人申請紀錄清單處理 ---------------- */
-    function loadUserData() {
+    function loadUserData(isBackground = false) {
       const tbody = document.getElementById('userTableBody');
-      tbody.innerHTML = '<tr><td colspan="8" class="p-4 text-center text-slate-400">載入資料中...</td></tr>';
+      if (!isBackground) {
+        tbody.innerHTML = '<tr><td colspan="8" class="p-4 text-center text-slate-400">載入資料中...</td></tr>';
+      }
 
       google.script.run
         .withSuccessHandler(function (data) {
@@ -1158,10 +1178,9 @@
         pageSum += priceVal;
 
         html += `
-          <tr class="hover:bg-slate-50 border-b border-slate-100 cursor-default" 
+          <tr class="hover:bg-slate-50 border-b border-slate-100 cursor-default tooltip-trigger" 
               data-remark="${(item.remark || '無').replace(/"/g, '&quot;')}" 
-              data-photo="${item.photoUrl || '無照片'}"
-              onmouseenter="showCustomTooltip(this)" onmousemove="moveCustomTooltip(event)" onmouseleave="hideCustomTooltip()">
+              data-photo="${item.photoUrl || '無照片'}">
             <td class="p-3 text-center"><input type="checkbox" class="user-row-checkbox rounded border-slate-300 text-blue-600 focus:ring-blue-500" value="${item.rowNumber}"></td>
             <td class="p-3 text-xs whitespace-nowrap">${formatDateOnly(item.timestamp)}</td>
             <td class="p-3"><span class="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700">${item.subject}</span></td>
@@ -1212,9 +1231,11 @@
 
 
     /* ---------------- 管理者審核後台處理 ---------------- */
-    function loadAdminData() {
+    function loadAdminData(isBackground = false) {
       const tbody = document.getElementById('adminTableBody');
-      tbody.innerHTML = '<tr><td colspan="9" class="p-4 text-center text-slate-400">載入資料中...</td></tr>';
+      if (!isBackground) {
+        tbody.innerHTML = '<tr><td colspan="9" class="p-4 text-center text-slate-400">載入資料中...</td></tr>';
+      }
 
       google.script.run
         .withSuccessHandler(function (data) {
@@ -1294,10 +1315,9 @@
           : `<span class="text-slate-400">無</span>`;
 
         html += `
-          <tr class="hover:bg-slate-50 border-b border-slate-100 cursor-default" 
+          <tr class="hover:bg-slate-50 border-b border-slate-100 cursor-default tooltip-trigger" 
               data-remark="${(item.remark || '無').replace(/"/g, '&quot;')}" 
-              data-photo="${item.photoUrl || '無照片'}"
-              onmouseenter="showCustomTooltip(this)" onmousemove="moveCustomTooltip(event)" onmouseleave="hideCustomTooltip()">
+              data-photo="${item.photoUrl || '無照片'}">
             <td class="p-3 text-xs whitespace-nowrap">${formatDateOnly(item.timestamp)}</td>
             <td class="p-3"><span class="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700">${item.subject}</span></td>
             <td class="p-3 font-medium text-slate-900">${item.chineseName}</td>
@@ -1467,18 +1487,13 @@
 
     // --- 自訂浮動提示視窗 (Tooltip) ---
     function showCustomTooltip(element) {
-      const tooltip = document.getElementById('custom-tooltip');
-      const tooltipRemark = document.getElementById('tooltip-remark');
-      const tooltipPhotoContainer = document.getElementById('tooltip-photo-container');
-      const tooltipPhoto = document.getElementById('tooltip-photo');
-      const tooltipNoPhoto = document.getElementById('tooltip-no-photo');
-
+      const tooltip = DOM.customTooltip;
       if (!tooltip) return;
 
       const remark = element.getAttribute('data-remark');
       const photoUrl = element.getAttribute('data-photo');
       
-      tooltipRemark.textContent = '備註：\n' + remark;
+      DOM.tooltipRemark.textContent = '備註：\n' + remark;
       
       if (photoUrl && photoUrl !== '無照片') {
         let previewUrl = photoUrl;
@@ -1492,13 +1507,13 @@
           }
         }
 
-        tooltipPhoto.src = previewUrl;
-        tooltipPhotoContainer.classList.remove('hidden');
-        tooltipNoPhoto.classList.add('hidden');
+        DOM.tooltipPhoto.src = previewUrl;
+        DOM.tooltipPhotoContainer.classList.remove('hidden');
+        DOM.tooltipNoPhoto.classList.add('hidden');
       } else {
-        tooltipPhoto.src = '';
-        tooltipPhotoContainer.classList.add('hidden');
-        tooltipNoPhoto.classList.remove('hidden');
+        DOM.tooltipPhoto.src = '';
+        DOM.tooltipPhotoContainer.classList.add('hidden');
+        DOM.tooltipNoPhoto.classList.remove('hidden');
       }
       
       tooltip.classList.remove('hidden');
@@ -1508,7 +1523,7 @@
     }
 
     function moveCustomTooltip(event) {
-      const tooltip = document.getElementById('custom-tooltip');
+      const tooltip = DOM.customTooltip;
       if (!tooltip || tooltip.classList.contains('hidden')) return;
       
       let x = event.clientX + 15;
@@ -1530,7 +1545,7 @@
     }
 
     function hideCustomTooltip() {
-      const tooltip = document.getElementById('custom-tooltip');
+      const tooltip = DOM.customTooltip;
       if (!tooltip) return;
       
       tooltip.classList.add('opacity-0');
