@@ -20,6 +20,26 @@
 
 ## 🏗️ 系統運作原理（白話文版）
 
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as 使用者 (Browser)
+    participant GAS as 系統 (GAS)
+    participant G as Google 授權中心
+    participant C as 快取 (CacheService)
+
+    U->>GAS: 點擊登入
+    GAS->>G: 導向 Google 授權畫面
+    G-->>U: 顯示同意授權畫面
+    U->>G: 同意授權
+    G-->>GAS: 導回系統並附上授權碼 (code)
+    GAS->>G: 後端使用 code 交換使用者個資
+    G-->>GAS: 回傳 Email、姓名等個資
+    GAS->>C: 產生亂碼通行證 (Token)，將個資綁定存入快取
+    GAS-->>U: 回傳通行證給前端網頁 (LocalStorage)
+    Note over U,GAS: 之後前端每次呼叫後端 API，都憑此通行證驗證身分
+```
+
 1. **使用者點擊登入**：我們把使用者導向 Google 的授權畫面。
 2. **Google 認證**：使用者同意授權後，Google 會把使用者導回我們的系統，並在網址後面偷偷塞一個密碼代號（稱為 `code`）。
 3. **後端換取個資**：我們的系統後端收到 `code` 後，立刻跑去跟 Google 總部交換使用者的 Email 和姓名。
