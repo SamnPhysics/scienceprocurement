@@ -4,6 +4,7 @@
 <head>
   <base target="_top">
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     body {
       font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif;
@@ -73,6 +74,15 @@
     </div>
   </dialog>
 
+  <!-- 自訂浮動提示視窗 (Tooltip) -->
+  <div id="custom-tooltip" class="fixed hidden z-[100] bg-white border border-slate-200 shadow-2xl rounded-lg p-3 max-w-[280px] w-max pointer-events-none transition-opacity duration-150 opacity-0">
+    <div id="tooltip-remark" class="text-sm text-slate-700 font-medium whitespace-pre-wrap mb-2 leading-relaxed"></div>
+    <div id="tooltip-photo-container" class="hidden">
+      <img id="tooltip-photo" src="" alt="照片預覽" class="w-full h-auto rounded border border-slate-100 object-contain max-h-48">
+    </div>
+    <div id="tooltip-no-photo" class="text-xs text-slate-400 italic hidden">無上傳照片</div>
+  </div>
+
   <!-- 全域載入遮罩 -->
   <div id="loading-overlay"
     class="fixed inset-0 bg-slate-50 z-50 flex flex-col items-center justify-center transition-opacity duration-300">
@@ -86,7 +96,7 @@
         <!-- Logo 圖片，改用 Google Drive 縮圖快取 API 避免破圖 (sz=w150 限制寬度) -->
         <img src="https://drive.google.com/thumbnail?id=16TS1lAniLvq61I7v3YGKBYgf0cjwos8j&sz=w150" alt="Logo"
           class="h-8 w-auto object-contain">
-        <div class="font-bold text-lg tracking-wider">自然學科課程 藥品/物品 請購管理系統</div>
+        <div class="font-bold text-lg tracking-wider">自然學科課程 藥品/物品 請購管理系統Ver 1.0</div>
       </div>
       <div class="flex space-x-2">
         <button id="btn-apply" onclick="switchView('apply')"
@@ -406,6 +416,14 @@
             <input type="text" id="admin-filter-applicant" oninput="debouncedApplyAdminFilters()" placeholder="搜尋申請者"
               class="rounded border border-slate-300 p-1.5 text-xs bg-white focus:outline-none w-28">
           </div>
+          <!-- 匯出 Excel -->
+          <button onclick="exportAdminDataToExcel()"
+            class="px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded border border-emerald-200 hover:bg-emerald-100 text-sm font-medium transition shadow-sm">
+            <div class="flex items-center space-x-1">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+              <span>匯出 Excel</span>
+            </div>
+          </button>
           <!-- 重新整理 -->
           <button onclick="loadAdminData()"
             class="px-3 py-1.5 bg-slate-100 text-slate-700 rounded border hover:bg-slate-200 text-sm font-medium transition">
@@ -473,6 +491,14 @@
   </footer>
 
   <script>
+    var templateSessionToken = '<?= sessionToken ?>';
+
+    if (templateSessionToken) {
+      localStorage.setItem('my_app_token', templateSessionToken);
+      // 安全地移除網址上的參數，避免跨網域或路徑不符導致的安全錯誤
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
     // 覆寫瀏覽器預設的 alert 視窗，使用精美的客製化 Modal
     window.alert = function (message) {
       const dialog = document.getElementById('custom-alert-dialog');
@@ -651,7 +677,7 @@
         document.getElementById('email').value = '無法載入權限資訊';
         hideLoadingOverlay();
       })
-      .getAuthStatus();
+      .getAuthStatus(localStorage.getItem('my_app_token'));
 
     function hideLoadingOverlay() {
       const overlay = document.getElementById('loading-overlay');
@@ -673,15 +699,15 @@
             .withFailureHandler(function () {
               setupUI({ loggedIn: false, role: 'guest', loginUrl: '' });
             })
-            .getAuthStatus();
+            .getAuthStatus(localStorage.getItem('my_app_token'));
         })
         .withFailureHandler(function (err) {
           alert('登出失敗：' + (err && err.message ? err.message : err));
           google.script.run.withSuccessHandler(function (status) {
             setupUI(status);
-          }).getAuthStatus();
+          }).getAuthStatus(localStorage.getItem('my_app_token'));
         })
-        .logoutOAuth();
+        .logoutOAuth(localStorage.getItem('my_app_token'));
     }
 
     // 依據 AuthStatus 調整畫面權限
@@ -736,15 +762,23 @@
           }
         }
       } else {
-        // 未登入：因瀏覽器安全性限制無法自動跳轉，需由使用者點擊按鈕觸發
+        // 未登入：點擊按鈕開啟彈出視窗
         currentUserEmail = '';
         currentUserDisplayName = '';
         document.getElementById('applicant').value = '尚未登入';
         document.getElementById('email').value = '尚未登入';
 
         btnAuth.innerText = '登入';
-        btnAuth.href = status.loginUrl || '#';
-        btnAuth.onclick = null;
+        btnAuth.href = "#";
+        btnAuth.onclick = function (e) {
+          e.preventDefault();
+          if (status.loginUrl) {
+            btnAuth.innerText = '跳轉中...';
+            window.top.location.href = status.loginUrl;
+          } else {
+            alert('無法取得登入網址，請重新整理網頁。');
+          }
+        };
         btnAuth.classList.add('bg-slate-200', 'text-slate-800');
         btnAuth.classList.remove('bg-rose-100', 'text-rose-800', 'hover:bg-rose-200');
 
@@ -924,7 +958,7 @@
           submitBtn.disabled = false;
           submitBtn.innerText = '提交申請';
         })
-        .submitApplication(formData);
+        .submitApplication(formData, localStorage.getItem('my_app_token'));
     }
 
     /* ---------------- 圖片貼上與預覽邏輯 ---------------- */
@@ -1077,7 +1111,7 @@
         .withFailureHandler(function (err) {
           tbody.innerHTML = `<tr><td colspan="8" class="p-4 text-center text-red-500">載入資料失敗：${err.message || err}</td></tr>`;
         })
-        .getUserData();
+        .getUserData(localStorage.getItem('my_app_token'));
     }
 
     // 共用日期過濾輔助函數
@@ -1124,7 +1158,10 @@
         pageSum += priceVal;
 
         html += `
-          <tr class="hover:bg-slate-50 border-b border-slate-100" title="備註: ${item.remark || '無'}">
+          <tr class="hover:bg-slate-50 border-b border-slate-100 cursor-default" 
+              data-remark="${(item.remark || '無').replace(/"/g, '&quot;')}" 
+              data-photo="${item.photoUrl || '無照片'}"
+              onmouseenter="showCustomTooltip(this)" onmousemove="moveCustomTooltip(event)" onmouseleave="hideCustomTooltip()">
             <td class="p-3 text-center"><input type="checkbox" class="user-row-checkbox rounded border-slate-300 text-blue-600 focus:ring-blue-500" value="${item.rowNumber}"></td>
             <td class="p-3 text-xs whitespace-nowrap">${formatDateOnly(item.timestamp)}</td>
             <td class="p-3"><span class="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700">${item.subject}</span></td>
@@ -1188,7 +1225,7 @@
         .withFailureHandler(function (err) {
           tbody.innerHTML = `<tr><td colspan="9" class="p-4 text-center text-red-500">載入資料失敗：${err.message || err}</td></tr>`;
         })
-        .getAdminData();
+        .getAdminData(localStorage.getItem('my_app_token'));
     }
 
     function applyAdminFilters() {
@@ -1257,7 +1294,10 @@
           : `<span class="text-slate-400">無</span>`;
 
         html += `
-          <tr class="hover:bg-slate-50 border-b border-slate-100" title="備註: ${item.remark || '無'}">
+          <tr class="hover:bg-slate-50 border-b border-slate-100 cursor-default" 
+              data-remark="${(item.remark || '無').replace(/"/g, '&quot;')}" 
+              data-photo="${item.photoUrl || '無照片'}"
+              onmouseenter="showCustomTooltip(this)" onmousemove="moveCustomTooltip(event)" onmouseleave="hideCustomTooltip()">
             <td class="p-3 text-xs whitespace-nowrap">${formatDateOnly(item.timestamp)}</td>
             <td class="p-3"><span class="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700">${item.subject}</span></td>
             <td class="p-3 font-medium text-slate-900">${item.chineseName}</td>
@@ -1304,6 +1344,55 @@
       }
     }
 
+    // 匯出管理者資料為 Excel
+    function exportAdminDataToExcel() {
+      if (typeof XLSX === 'undefined') {
+        alert('Excel 匯出模組載入失敗，請檢查網路連線。');
+        return;
+      }
+
+      if (!filteredAdminData || filteredAdminData.length === 0) {
+        alert('沒有符合篩選條件的資料可以匯出。');
+        return;
+      }
+
+      // 將資料轉換為 Excel 格式
+      const exportData = filteredAdminData.map(item => ({
+        '時間戳記': item.timestamp || '',
+        '物品/藥品中文名稱': item.chineseName || '',
+        '藥品英文名稱(含化學式，分子量)或物品名稱': item.englishName || '',
+        '所需數量': item.quantity || '',
+        '物品分類/化學藥品狀態': item.category || '',
+        '藥品濃度(液態)': item.concentration || '無',
+        '藥品容量(液態)': item.volume || '無',
+        '課程使用時間': item.usageTime || '',
+        '科別': item.subject || '',
+        '申請人': item.applicant || '',
+        '電子郵件地址': item.email || '',
+        '物品/藥品照片': item.photoUrl || '無照片',
+        '是否請購': item.status || '未請購',
+        '採購總價': item.totalPrice || '',
+        '備註': item.remark || ''
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      
+      // 自動調整欄寬
+      const wscols = Object.keys(exportData[0]).map(key => ({ wch: Math.max(key.length * 2, 12) }));
+      ws['!cols'] = wscols;
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "採購清單");
+
+      const yearStr = DOM.adminFilterYear.value ? DOM.adminFilterYear.value + '年' : '全部年份';
+      const monthStr = DOM.adminFilterMonth.value ? DOM.adminFilterMonth.value + '月' : '全部月份';
+      const applicantStr = DOM.adminFilterApplicant.value.trim() ? '_' + DOM.adminFilterApplicant.value.trim() : '';
+      
+      const fileName = `採購清單_${yearStr}_${monthStr}${applicantStr}.xlsx`;
+
+      XLSX.writeFile(wb, fileName);
+    }
+
     // 更新狀態與採購總價
     function updateStatus(rowNumber, newStatus, totalPrice) {
       google.script.run
@@ -1325,7 +1414,7 @@
           alert('連線失敗，更新未成功：' + err.message);
           loadAdminData(); // 失敗則重載
         })
-        .updateProcurementStatus(rowNumber, newStatus, totalPrice);
+        .updateProcurementStatus(rowNumber, newStatus, totalPrice, localStorage.getItem('my_app_token'));
     }
 
     // 全選/全不選使用者列表勾選框
@@ -1372,8 +1461,84 @@
             }
             alert('連線失敗，取消未成功：' + err.message);
           })
-          .deleteUserRequests(rowNumbers);
+          .deleteUserRequests(rowNumbers, localStorage.getItem('my_app_token'));
       }
+    }
+
+    // --- 自訂浮動提示視窗 (Tooltip) ---
+    function showCustomTooltip(element) {
+      const tooltip = document.getElementById('custom-tooltip');
+      const tooltipRemark = document.getElementById('tooltip-remark');
+      const tooltipPhotoContainer = document.getElementById('tooltip-photo-container');
+      const tooltipPhoto = document.getElementById('tooltip-photo');
+      const tooltipNoPhoto = document.getElementById('tooltip-no-photo');
+
+      if (!tooltip) return;
+
+      const remark = element.getAttribute('data-remark');
+      const photoUrl = element.getAttribute('data-photo');
+      
+      tooltipRemark.textContent = '備註：\n' + remark;
+      
+      if (photoUrl && photoUrl !== '無照片') {
+        let previewUrl = photoUrl;
+        const match = photoUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
+        if (match && match[1]) {
+          previewUrl = 'https://drive.google.com/thumbnail?id=' + match[1] + '&sz=w500';
+        } else if (photoUrl.includes('id=')) {
+          const idMatch = photoUrl.match(/id=([a-zA-Z0-9_-]+)/);
+          if (idMatch && idMatch[1]) {
+            previewUrl = 'https://drive.google.com/thumbnail?id=' + idMatch[1] + '&sz=w500';
+          }
+        }
+
+        tooltipPhoto.src = previewUrl;
+        tooltipPhotoContainer.classList.remove('hidden');
+        tooltipNoPhoto.classList.add('hidden');
+      } else {
+        tooltipPhoto.src = '';
+        tooltipPhotoContainer.classList.add('hidden');
+        tooltipNoPhoto.classList.remove('hidden');
+      }
+      
+      tooltip.classList.remove('hidden');
+      // 強制重繪以觸發動畫
+      void tooltip.offsetWidth;
+      tooltip.classList.remove('opacity-0');
+    }
+
+    function moveCustomTooltip(event) {
+      const tooltip = document.getElementById('custom-tooltip');
+      if (!tooltip || tooltip.classList.contains('hidden')) return;
+      
+      let x = event.clientX + 15;
+      let y = event.clientY + 15;
+      
+      const rect = tooltip.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      
+      if (x + rect.width > viewportWidth) {
+        x = event.clientX - rect.width - 15;
+      }
+      if (y + rect.height > viewportHeight) {
+        y = event.clientY - rect.height - 15;
+      }
+      
+      tooltip.style.left = x + 'px';
+      tooltip.style.top = y + 'px';
+    }
+
+    function hideCustomTooltip() {
+      const tooltip = document.getElementById('custom-tooltip');
+      if (!tooltip) return;
+      
+      tooltip.classList.add('opacity-0');
+      setTimeout(() => {
+        if (tooltip.classList.contains('opacity-0')) {
+          tooltip.classList.add('hidden');
+        }
+      }, 150);
     }
   </script>
 </body>

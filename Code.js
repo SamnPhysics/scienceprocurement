@@ -1,5 +1,8 @@
+// ====== 全域變數定義 ======
+const CLIENT_ID = PropertiesService.getScriptProperties().getProperty('CLIENT_ID');
+const CLIENT_SECRET = PropertiesService.getScriptProperties().getProperty('CLIENT_SECRET');
 
-//物品藥品採購表單的填答試算表
+// 物品藥品採購表單的填答試算表
 const SPREADSHEET_ID = '19kPC7jyRhmWXzy6gdkVQQTXUvwwdlPvlRzy15JtPvnA';
 const SHEET_NAME = '表單回應 1';
 const ADMIN_EMAILS = ['5501@fhsh.khc.edu.tw', '5502@fhsh.khc.edu.tw'];
@@ -9,144 +12,187 @@ function isAdminUser(email) {
   return ADMIN_EMAILS.indexOf(email.toLowerCase()) !== -1;
 }
 
-// 初始進入點：渲染網頁介面
-function doGet(e) {
-  return HtmlService.createTemplateFromFile('Index')
-    .evaluate()
-    .setTitle('自然科課程藥品/物品申請採購管理系統')
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1')
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+// 供開發者在編輯器內手動執行，以觸發 Email 授權視窗
+function testEmail() {
+  MailApp.sendEmail(Session.getActiveUser().getEmail(), "測試授權", "如果您收到這封信，代表發信授權成功！");
 }
 
-// ====== OAuth2 授權服務 ======
-
-function getOAuthService() {
-  var props = PropertiesService.getScriptProperties();
-  return OAuth2.createService('GoogleAuth')
-    .setAuthorizationBaseUrl('https://accounts.google.com/o/oauth2/v2/auth')
-    .setTokenUrl('https://oauth2.googleapis.com/token')
-    .setClientId(props.getProperty('CLIENT_ID') || '')
-    .setClientSecret(props.getProperty('CLIENT_SECRET') || '')
-    .setCallbackFunction('authCallback')
-    // 回歸官方範例：僅使用 PropertiesService 儲存 token，不啟用 CacheService
-    .setPropertyStore(PropertiesService.getUserProperties())
-    .setLock(LockService.getUserLock())
-    .setScope('openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile')
-    .setParam('access_type', 'offline')
-    .setParam('hd', 'fhsh.khc.edu.tw');
+// 動態取得 Web App URL
+function getAppUrl() {
+  return 'https://script.google.com/macros/s/AKfycbw02wBN2z_bXii67odSg_Xoqx11f4RWh9NOVvFBvFutkCT6Q6KtGsbVLtl9c-9KqZVC/exec';
 }
 
-function authCallback(request) {
-  var service = getOAuthService();
-  var authorized = service.handleCallback(request);
-  if (authorized) {
-    // 使用手動設定的 APP_URL，避免 ScriptApp.getService().getUrl() 返回舊版錯誤格式網址
-    var appUrl = PropertiesService.getScriptProperties().getProperty('APP_URL') || ScriptApp.getService().getUrl();
-    return HtmlService.createHtmlOutput(
-      '<div style="font-family: sans-serif; padding: 2rem; text-align: center;">' +
-      '<h2>登入授權成功！</h2>' +
-      '<p>系統將在 1 秒後自動為您重新導向...</p>' +
-      '<p style="margin-top: 1rem; font-size: 0.9em; color: #666;">若沒有自動跳轉，請 <a id="manual-link" href="' + appUrl + '" target="_top" style="color: #2563eb; text-decoration: underline;">點擊此處回到系統</a>。</p>' +
-      '<script>' +
-      '  setTimeout(function() { ' +
-      '    try { ' +
-      '      document.getElementById("manual-link").click(); ' +
-      '    } catch (err) { ' +
-      '      window.open("' + appUrl + '", "_top"); ' +
-      '    } ' +
-      '  }, 1000);' +
-      '</script>' +
-      '</div>'
-    );
-  } else {
-    return HtmlService.createHtmlOutput('授權失敗，請關閉視窗並重新嘗試。');
-  }
+// 供前端取得 Client ID
+function getClientId() {
+  return CLIENT_ID;
 }
 
+// 供前端取得登入網址
 function getLoginUrl() {
-  var service = getOAuthService();
-  return service.getAuthorizationUrl();
+  const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth?' +
+    'client_id=' + encodeURIComponent(CLIENT_ID) +
+    '&redirect_uri=' + encodeURIComponent(getAppUrl()) +
+    '&response_type=code' +
+    '&scope=' + encodeURIComponent('openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile') +
+    '&access_type=offline' +
+    '&hd=fhsh.khc.edu.tw';
+  return authUrl;
 }
 
-function logoutOAuth() {
-  getOAuthService().reset();
-  // 使用手動設定的 APP_URL，避免 ScriptApp.getService().getUrl() 返回舊版錯誤格式網址
-  return PropertiesService.getScriptProperties().getProperty('APP_URL') || ScriptApp.getService().getUrl();
-}
+// ====== 路由判斷 ======
 
-function getOAuthProfile() {
-  var service = getOAuthService();
-  if (!service.hasAccess()) {
-    return { email: '', displayName: '' };
+function doGet(e) {
+  // 如果帶有 code 參數，表示是 Google 授權後跳轉回來
+  if (e.parameter.code) {
+    return processOAuthCallback(e.parameter.code);
+  } else {
+    // 渲染首頁，如果有 session_token 參數，就傳給前端樣板
+    var template = HtmlService.createTemplateFromFile('Index');
+    template.sessionToken = e.parameter.session_token || '';
+    template.appUrl = getAppUrl();
+
+    return template.evaluate()
+      .setTitle('自然科課程藥品/物品申請採購管理系統')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   }
+}
 
-  var token = service.getAccessToken();
-  var cache = CacheService.getUserCache();
-  // 使用 token 後綴當作快取 key，避免超過 Cache Key 長度限制 (250 chars)
-  var cacheKey = 'oauth_profile_' + token.substring(token.length - 20);
+// ====== 後端處理 OAuth Callback 與發放 Token ======
 
-  var cachedProfile = cache.get(cacheKey);
-  if (cachedProfile) {
-    try {
-      return JSON.parse(cachedProfile);
-    } catch (e) { }
+function processOAuthCallback(code) {
+  try {
+    // 1. 交換 Token
+    const tokenResponse = UrlFetchApp.fetch('https://oauth2.googleapis.com/token', {
+      method: 'post',
+      payload: {
+        client_id: CLIENT_ID,
+        client_secret: CLIENT_SECRET,
+        code: code,
+        redirect_uri: getAppUrl(),
+        grant_type: 'authorization_code'
+      },
+      muteHttpExceptions: true
+    });
+
+    const tokenData = JSON.parse(tokenResponse.getContentText());
+    if (tokenData.error) {
+      throw new Error('Token 交換失敗: ' + tokenData.error_description);
+    }
+
+    const accessToken = tokenData.access_token;
+
+    // 2. 取得 UserInfo
+    const userResponse = UrlFetchApp.fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+      headers: { Authorization: 'Bearer ' + accessToken },
+      muteHttpExceptions: true
+    });
+
+    const userData = JSON.parse(userResponse.getContentText());
+    if (userData.error) {
+      throw new Error('無法獲取使用者資訊');
+    }
+
+    const profile = {
+      email: userData.email || '',
+      name: userData.name || '',
+      picture: userData.picture || ''
+    };
+
+    // 3. 產生專屬 Session Token 並寫入 Cache (保存 6 小時 = 21600 秒)
+    const sessionToken = Utilities.getUuid();
+    CacheService.getScriptCache().put('session_' + sessionToken, JSON.stringify(profile), 21600);
+
+    // 4. 回傳一段腳本，讓整個畫面導向帶有 Token 的網址
+    var appUrl = getAppUrl();
+    var redirectUrl = appUrl + (appUrl.indexOf('?') === -1 ? '?' : '&') + 'session_token=' + encodeURIComponent(sessionToken);
+
+    var html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <script src="https://cdn.tailwindcss.com"></script>
+        <script>
+          // 嘗試自動跳轉
+          setTimeout(function() {
+            try {
+              window.top.location.href = "${redirectUrl}";
+            } catch(e) {
+              console.log("自動跳轉被阻擋", e);
+            }
+          }, 500);
+        </script>
+      </head>
+      <body class="bg-slate-50 flex items-center justify-center min-h-screen">
+        <div class="bg-white p-8 rounded-xl shadow-lg text-center max-w-sm w-full mx-4">
+          <div class="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+          </div>
+          <h2 class="text-2xl font-bold text-slate-800 mb-2">登入成功！</h2>
+          <p class="text-slate-500 mb-6">如果畫面沒有自動跳轉，請點擊下方按鈕返回系統。</p>
+          <a href="${redirectUrl}" target="_top" class="block w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition duration-200">
+            回到系統主頁
+          </a>
+        </div>
+      </body>
+      </html>
+    `;
+    return HtmlService.createHtmlOutput(html);
+  } catch (error) {
+    return HtmlService.createHtmlOutput('授權失敗: ' + error.message);
+  }
+}
+
+// 驗證前端傳來的 Session Token
+function verifySessionToken(token) {
+  if (!token) throw new Error('未提供登入憑證 (Token)，請重新登入。');
+
+  var cachedData = CacheService.getScriptCache().get('session_' + token);
+  if (!cachedData) {
+    throw new Error('登入已逾期或無效，請重新登入。');
   }
 
   try {
-    var url = 'https://www.googleapis.com/oauth2/v2/userinfo';
-    var response = UrlFetchApp.fetch(url, {
-      headers: {
-        Authorization: 'Bearer ' + token
-      }
-    });
-    var profile = JSON.parse(response.getContentText()) || {};
-    var result = {
-      email: profile.email || '',
-      displayName: profile.name || ''
-    };
-
-    // 快取 1 小時 (3600 秒)
-    cache.put(cacheKey, JSON.stringify(result), 3600);
-    return result;
+    return JSON.parse(cachedData);
   } catch (e) {
-    return { email: '', displayName: '' };
+    throw new Error('身分資料解析失敗，請重新登入。');
   }
-}
-
-function getOAuthEmail() {
-  return getOAuthProfile().email;
 }
 
 // 供前端檢查權限與登入狀態的端點
-function getAuthStatus() {
-  var profile = getOAuthProfile();
-  var email = profile.email;
-  var displayName = profile.displayName || (email ? email.split('@')[0] : '');
-  if (!email) {
+function getAuthStatus(token) {
+  try {
+    var profile = verifySessionToken(token);
+    var email = profile.email;
+    var displayName = profile.name || email.split('@')[0];
+
+    if (!email.toLowerCase().endsWith('@fhsh.khc.edu.tw')) {
+      return { loggedIn: true, email: email, displayName: displayName, role: "invalid", message: "非學校網域帳號" };
+    }
+
+    var role = isAdminUser(email) ? "admin" : "user";
+    return { loggedIn: true, email: email, displayName: displayName, role: role, picture: profile.picture };
+  } catch (e) {
     return { loggedIn: false, email: "", role: "guest", loginUrl: getLoginUrl() };
   }
-
-  if (!email.toLowerCase().endsWith('@fhsh.khc.edu.tw')) {
-    return { loggedIn: true, email: email, displayName: displayName, role: "invalid", message: "非學校網域帳號" };
-  }
-
-  var role = isAdminUser(email) ? "admin" : "user";
-  return { loggedIn: true, email: email, displayName: displayName, role: role };
 }
 
+// ====== 原有業務邏輯 (每個 API 皆加入 sessionToken 參數) ======
 
 // 處理表單提交（含圖片解碼與儲存）
-function submitApplication(formData) {
+function submitApplication(formData, token) {
   try {
-    var profile = getOAuthProfile();
+    var profile = verifySessionToken(token);
     var email = profile.email;
     if (!email || !email.toLowerCase().endsWith('@fhsh.khc.edu.tw')) {
       return { success: false, message: '提交失敗：您必須登入學校網域帳號 (@fhsh.khc.edu.tw) 才能進行申請！' };
     }
+
     // 安全考量：一律以後端獲取的登入 email 作為寫入值
     formData.email = email;
-    var oauthDisplayName = profile.displayName || '';
-    var applicant = (oauthDisplayName || formData.applicant || email.split('@')[0] || '').toString();
+    var applicant = (profile.name || formData.applicant || email.split('@')[0] || '').toString();
 
     var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     var sheet = ss.getSheetByName(SHEET_NAME);
@@ -172,7 +218,7 @@ function submitApplication(formData) {
       var blob = Utilities.newBlob(Utilities.base64Decode(base64Data), contentType, formData.photoName);
 
       // 建立檔案於指定的雲端硬碟資料夾
-      var folderId = '0B4BxlK1u01jlfnZoU0xObGNVMkYwbWZDalNTd05CMTBhYUZxY0k4RjFKTlJ3VmNLMFVTRmM';
+      var folderId = '1YNxutMC0-sqU4qJM2JWp6o4jwYUXKkA-';
       var folder = DriveApp.getFolderById(folderId);
       var file = folder.createFile(blob);
       file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
@@ -185,7 +231,6 @@ function submitApplication(formData) {
     }
 
     try {
-      // 寫入資料列
       sheet.appendRow([
         new Date(),
         formData.chineseName,
@@ -204,13 +249,43 @@ function submitApplication(formData) {
         '' // 初始採購總價為空
       ]);
 
-      // 資料更新後，清除快取
       CacheService.getScriptCache().remove('sheet_data_cache');
     } finally {
       lock.releaseLock();
     }
 
-    // 寄信功能已依要求移除
+    // 發送 Email 通知給管理者
+    try {
+      var subjectStr = "【新採購申請通知】" + formData.chineseName;
+      
+      var bodyStr = "系統收到一筆新的藥品/物品採購申請：\n\n" +
+        "申請人：" + applicant + "\n" +
+        "科別：" + formData.subject + "\n" +
+        "中文名稱：" + formData.chineseName + "\n" +
+        "英文名稱：" + formData.englishName + "\n" +
+        "數量：" + formData.quantity + "\n" +
+        "使用時間：" + formData.usageTime + "\n" +
+        "備註：" + (formData.remark || '無') + "\n\n" +
+        "請登入系統管理者後台查看詳細內容並進行審核： https://reurl.cc/537XAV";
+
+      var htmlBodyStr = "系統收到一筆新的藥品/物品採購申請：<br><br>" +
+        "<b>申請人：</b>" + applicant + "<br>" +
+        "<b>科別：</b>" + formData.subject + "<br>" +
+        "<b>中文名稱：</b>" + formData.chineseName + "<br>" +
+        "<b>英文名稱：</b>" + formData.englishName + "<br>" +
+        "<b>數量：</b>" + formData.quantity + "<br>" +
+        "<b>使用時間：</b>" + formData.usageTime + "<br>" +
+        "<b>備註：</b>" + (formData.remark || '無') + "<br><br>" +
+        "請 <a href='https://reurl.cc/537XAV'>登入系統管理者後台</a> 查看詳細內容並進行審核。";
+
+      GmailApp.sendEmail(ADMIN_EMAILS.join(","), subjectStr, bodyStr, {
+        htmlBody: htmlBodyStr,
+        name: "自然科採購系統"
+      });
+    } catch (e) {
+      console.log("Email發送失敗: " + e.toString());
+      return { success: true, message: '資料與照片提交成功！(但Email通知發送失敗：' + e.toString() + ')' };
+    }
 
     return { success: true, message: '資料與照片提交成功！' };
   } catch (error) {
@@ -218,162 +293,11 @@ function submitApplication(formData) {
   }
 }
 
-// 格式化日期時間為字串以防 serialization 失敗
-function formatDateTime(val) {
-  if (!val) return "";
-  if (val instanceof Date) {
-    if (isNaN(val.getTime())) return "";
-    return Utilities.formatDate(val, "GMT+8", "yyyy-MM-dd HH:mm");
-  }
-  try {
-    var d = new Date(val);
-    if (!isNaN(d.getTime())) {
-      return Utilities.formatDate(d, "GMT+8", "yyyy-MM-dd HH:mm");
-    }
-  } catch (e) { }
-  return String(val);
-}
-
-// 格式化日期僅包含年月日 (yyyy-MM-dd)
-function formatDateOnly(val) {
-  if (!val) return "";
-  if (val instanceof Date) {
-    if (isNaN(val.getTime())) return "";
-    return Utilities.formatDate(val, "GMT+8", "yyyy-MM-dd");
-  }
-  try {
-    var d = new Date(val);
-    if (!isNaN(d.getTime())) {
-      return Utilities.formatDate(d, "GMT+8", "yyyy-MM-dd");
-    }
-  } catch (e) { }
-  var str = String(val).trim();
-  if (str.indexOf(' ') !== -1) {
-    str = str.split(' ')[0];
-  }
-  if (str.indexOf('T') !== -1) {
-    str = str.split('T')[0];
-  }
-  return str;
-}
-
-function mapSheetRow(row, index, colMap) {
-  colMap = colMap || {};
-  function getVal(colName, defaultIdx) {
-    var idx = colMap.hasOwnProperty(colName) ? colMap[colName] : defaultIdx;
-    return row[idx] !== undefined ? row[idx] : '';
-  }
-
-  var timestamp = getVal('時間戳記', 0);
-  var chineseName = getVal('物品/藥品中文名稱', 1);
-  var englishName = getVal('藥品英文名稱(含化學式，分子量)或物品名稱', 2);
-  var quantity = getVal('所需數量', 3);
-  var category = getVal('物品分類/化學藥品狀態', 4);
-  var concentration = getVal('藥品濃度(液態)', 5);
-  var usageTime = formatDateTime(getVal('課程使用時間', 6));
-  var subject = getVal('請勾選所需科別', 7);
-  var applicant = getVal('申請人', 8);
-  var email = getVal('電子郵件地址', 9);
-  var photoUrl = getVal('物品/藥品照片', 10);
-  var volume = getVal('藥品容量(液態)', 11);
-  var status = getVal('是否請購', 12) || '未請購';
-  var remark = getVal('備註', 13);
-  var totalPrice = getVal('採購總價', 14);
-
-  // === 保留相容舊版錯位資料的安全機制 ===
-  var statusSet = { '未請購': true, '已請購': true, '不通過': true };
-  function looksLikeEmail(v) { return typeof v === 'string' && v.indexOf('@') !== -1; }
-  function looksLikeUrl(v) { return typeof v === 'string' && /^https?:\/\//i.test(v); }
-
-  if (!looksLikeEmail(email)) {
-    if (looksLikeEmail(applicant)) { email = applicant; }
-    else if (looksLikeEmail(photoUrl)) { email = photoUrl; }
-    else if (looksLikeEmail(row[8])) { email = row[8]; }
-  }
-
-  if (photoUrl !== '無照片' && !looksLikeUrl(photoUrl)) {
-    if (looksLikeUrl(email)) { photoUrl = email; }
-    else if (looksLikeUrl(row[9])) { photoUrl = row[9]; }
-    else if (looksLikeUrl(row[10])) { photoUrl = row[10]; }
-    else { photoUrl = '無照片'; }
-  }
-  if (!photoUrl) photoUrl = '無照片';
-
-  if (!statusSet[status]) {
-    if (statusSet[row[12]]) status = row[12];
-    else if (statusSet[row[11]]) status = row[11];
-    else if (statusSet[row[10]]) status = row[10];
-    else status = '未請購';
-  }
-
-  if (applicant === email || looksLikeEmail(applicant)) {
-    applicant = String(email).split('@')[0];
-  }
-
-  return {
-    rowNumber: index + 2,
-    timestamp: formatDateOnly(timestamp),
-    chineseName: chineseName,
-    englishName: englishName,
-    quantity: quantity,
-    category: category,
-    concentration: concentration,
-    usageTime: usageTime,
-    subject: subject,
-    applicant: applicant,
-    email: email,
-    photoUrl: photoUrl,
-    volume: volume,
-    status: status,
-    remark: remark,
-    totalPrice: totalPrice
-  };
-}
-
-function getSheetData() {
-  var cache = CacheService.getScriptCache();
-  var cachedData = cache.get('sheet_data_cache');
-  if (cachedData) {
-    try {
-      return JSON.parse(cachedData);
-    } catch (e) { }
-  }
-
-  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  var sheet = ss.getSheetByName(SHEET_NAME);
-  if (!sheet) return [];
-
-  var data = sheet.getDataRange().getValues();
-  if (data.length <= 1) return []; // 只有標頭或空表
-
-  var headers = data[0];
-  var colMap = {};
-  for (var i = 0; i < headers.length; i++) {
-    colMap[headers[i]] = i;
-  }
-
-  var rows = data.slice(1);
-
-  var mappedData = rows.map(function (row, index) {
-    return mapSheetRow(row, index, colMap);
-  });
-
-  // 依照時間倒數列出
-  var reversedData = mappedData.reverse();
-
-  try {
-    // 寫入快取 1 小時，最大限制約 100KB。若資料過大會引發例外，則忽略快取。
-    cache.put('sheet_data_cache', JSON.stringify(reversedData), 3600);
-  } catch (e) { }
-
-  return reversedData;
-}
-
 // 供管理者介面讀取所有資料
-function getAdminData() {
+function getAdminData(token) {
   try {
-    var email = getOAuthEmail();
-    if (!isAdminUser(email)) {
+    var profile = verifySessionToken(token);
+    if (!isAdminUser(profile.email)) {
       throw new Error("權限不足：您的帳號無管理員權限！");
     }
 
@@ -383,9 +307,11 @@ function getAdminData() {
   }
 }
 
-function getUserData() {
+// 供一般使用者讀取自己的資料
+function getUserData(token) {
   try {
-    var email = getOAuthEmail();
+    var profile = verifySessionToken(token);
+    var email = profile.email;
     if (!email || !email.toLowerCase().endsWith('@fhsh.khc.edu.tw')) {
       return [];
     }
@@ -398,35 +324,29 @@ function getUserData() {
   }
 }
 
-// 更新特定的請購狀態與總價
-function updateProcurementStatus(rowNumber, newStatus, totalPrice) {
+// 更新特定的請購狀態與總價 (限管理員)
+function updateProcurementStatus(rowNumber, newStatus, totalPrice, token) {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(10000)) {
     return { success: false, message: '操作失敗：系統目前忙碌中，請稍後再試。' };
   }
 
   try {
-    var email = getOAuthEmail();
-    if (!isAdminUser(email)) {
+    var profile = verifySessionToken(token);
+    if (!isAdminUser(profile.email)) {
       return { success: false, message: '操作失敗：您無權執行此操作！' };
     }
 
     var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     var sheet = ss.getSheetByName(SHEET_NAME);
 
-    // 動態找欄位索引
     var headers = sheet.getRange(1, 1, 1, Math.max(15, sheet.getLastColumn())).getValues()[0];
-    var statusColIdx = headers.indexOf('是否請購') + 1;
-    var priceColIdx = headers.indexOf('採購總價') + 1;
-
-    // 萬一找不到表頭則使用預設值
-    if (statusColIdx === 0) statusColIdx = 13;
-    if (priceColIdx === 0) priceColIdx = 15;
+    var statusColIdx = headers.indexOf('是否請購') + 1 || 13;
+    var priceColIdx = headers.indexOf('採購總價') + 1 || 15;
 
     sheet.getRange(rowNumber, statusColIdx).setValue(newStatus);
     sheet.getRange(rowNumber, priceColIdx).setValue(totalPrice);
 
-    // 清除快取
     CacheService.getScriptCache().remove('sheet_data_cache');
     return { success: true };
   } catch (error) {
@@ -437,14 +357,15 @@ function updateProcurementStatus(rowNumber, newStatus, totalPrice) {
 }
 
 // 供一般使用者刪除（取消）屬於自己的請購紀錄
-function deleteUserRequests(rowNumbers) {
+function deleteUserRequests(rowNumbers, token) {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(10000)) {
     return { success: false, message: '系統目前忙碌中，請稍後再試。' };
   }
 
   try {
-    var email = getOAuthEmail();
+    var profile = verifySessionToken(token);
+    var email = profile.email;
     if (!email || !email.toLowerCase().endsWith('@fhsh.khc.edu.tw')) {
       return { success: false, message: '操作失敗：驗證身分失敗。' };
     }
@@ -452,15 +373,13 @@ function deleteUserRequests(rowNumbers) {
     var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     var sheet = ss.getSheetByName(SHEET_NAME);
 
-    // 先讀取所有資料到記憶體以進行批量驗證，減少對 sheet.getRange 迴圈的依賴
     var data = sheet.getDataRange().getValues();
     if (data.length <= 1) return { success: false, message: '找不到資料表內容。' };
 
     var headers = data[0];
     var emailColIdx = headers.indexOf('電子郵件地址');
-    if (emailColIdx === -1) emailColIdx = 9; // Fallback to 0-indexed 9
+    if (emailColIdx === -1) emailColIdx = 9;
 
-    // 由大到小排序，避免刪除列後導致後續列號錯位
     rowNumbers.sort(function (a, b) { return b - a; });
 
     for (var i = 0; i < rowNumbers.length; i++) {
@@ -469,9 +388,7 @@ function deleteUserRequests(rowNumbers) {
         throw new Error('無效的列號：' + rowNum);
       }
 
-      // data 是 0-indexed，rowNum 是 1-indexed
       var rowEmail = data[rowNum - 1][emailColIdx];
-
       if (String(rowEmail).toLowerCase().trim() === email.toLowerCase().trim()) {
         sheet.deleteRow(rowNum);
       } else {
@@ -479,7 +396,6 @@ function deleteUserRequests(rowNumbers) {
       }
     }
 
-    // 清除快取
     CacheService.getScriptCache().remove('sheet_data_cache');
     return { success: true };
   } catch (error) {
@@ -489,9 +405,89 @@ function deleteUserRequests(rowNumbers) {
   }
 }
 
-function setAppUrl() {
-  PropertiesService.getScriptProperties().setProperty(
-    'APP_URL',
-    'https://script.google.com/a/macros/fhsh.khc.edu.tw/s/AKfycbw02wBN2z_bXii67odSg_Xoqx11f4RWh9NOVvFBvFutkCT6Q6KtGsbVLtl9c-9KqZVC/exec'
-  );
+// 登出：清除後端快取
+function logoutOAuth(token) {
+  if (token) {
+    CacheService.getScriptCache().remove('session_' + token);
+  }
+  return { success: true };
+}
+
+// ====== 輔助函式 ======
+
+function formatDateTime(val) {
+  if (!val) return "";
+  if (val instanceof Date) {
+    if (isNaN(val.getTime())) return "";
+    return Utilities.formatDate(val, "GMT+8", "yyyy-MM-dd HH:mm");
+  }
+  return String(val);
+}
+
+function formatDateOnly(val) {
+  if (!val) return "";
+  if (val instanceof Date) {
+    if (isNaN(val.getTime())) return "";
+    return Utilities.formatDate(val, "GMT+8", "yyyy-MM-dd");
+  }
+  var str = String(val).trim();
+  return str.split(' ')[0].split('T')[0];
+}
+
+function mapSheetRow(row, index, colMap) {
+  var getVal = function (colName, defaultIdx) {
+    var idx = colMap.hasOwnProperty(colName) ? colMap[colName] : defaultIdx;
+    return row[idx] !== undefined ? row[idx] : '';
+  };
+  return {
+    rowNumber: index + 2,
+    timestamp: formatDateOnly(getVal('時間戳記', 0)),
+    chineseName: getVal('物品/藥品中文名稱', 1),
+    englishName: getVal('藥品英文名稱(含化學式，分子量)或物品名稱', 2),
+    quantity: getVal('所需數量', 3),
+    category: getVal('物品分類/化學藥品狀態', 4),
+    concentration: getVal('藥品濃度(液態)', 5),
+    usageTime: formatDateTime(getVal('課程使用時間', 6)),
+    subject: getVal('請勾選所需科別', 7),
+    applicant: getVal('申請人', 8),
+    email: getVal('電子郵件地址', 9),
+    photoUrl: getVal('物品/藥品照片', 10) || '無照片',
+    volume: getVal('藥品容量(液態)', 11),
+    status: getVal('是否請購', 12) || '未請購',
+    remark: getVal('備註', 13),
+    totalPrice: getVal('採購總價', 14)
+  };
+}
+
+function getSheetData() {
+  var cache = CacheService.getScriptCache();
+  var cachedData = cache.get('sheet_data_cache');
+  if (cachedData) {
+    try { return JSON.parse(cachedData); } catch (e) { }
+  }
+
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var sheet = ss.getSheetByName(SHEET_NAME);
+  if (!sheet) return [];
+
+  var data = sheet.getDataRange().getValues();
+  if (data.length <= 1) return [];
+
+  var headers = data[0];
+  var colMap = {};
+  for (var i = 0; i < headers.length; i++) {
+    colMap[headers[i]] = i;
+  }
+
+  var rows = data.slice(1);
+  var mappedData = rows.map(function (row, index) {
+    return mapSheetRow(row, index, colMap);
+  });
+
+  var reversedData = mappedData.reverse();
+  try {
+    cache.put('sheet_data_cache', JSON.stringify(reversedData), 3600);
+  } catch (e) { }
+
+  return reversedData;
 }
