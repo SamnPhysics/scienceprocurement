@@ -94,9 +94,11 @@
     <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row justify-between items-center py-3 sm:h-16 gap-3">
       <div class="flex items-center space-x-3">
         <!-- Logo 圖片，改用 Google Drive 縮圖快取 API 避免破圖 (sz=w150 限制寬度) -->
-        <img src="https://drive.google.com/thumbnail?id=16TS1lAniLvq61I7v3YGKBYgf0cjwos8j&sz=w150" alt="Logo"
+        <? if (logoId) { ?>
+        <img src="https://drive.google.com/thumbnail?id=<?= logoId ?>&sz=w150" alt="Logo"
           class="h-8 w-auto object-contain">
-        <div class="font-bold text-lg tracking-wider">自然學科課程 藥品/物品 請購管理系統Ver 1.0</div>
+        <? } ?>
+        <div class="font-bold text-lg tracking-wider"><?= systemTitle ?></div>
       </div>
       <div class="flex space-x-2">
         <button id="btn-apply" onclick="switchView('apply')"
@@ -128,7 +130,7 @@
       <!-- 說明文字 -->
       <details class="mb-6 bg-blue-50 border border-blue-200 text-blue-800 p-4 rounded-lg text-sm leading-relaxed shadow-sm group cursor-pointer">
         <summary class="font-bold text-base text-blue-900 list-none flex justify-between items-center focus:outline-none">
-          <span>供自然學科課程實驗、科展及等能力競賽..等相關藥品、物品(1萬元以下) 申請</span>
+          <span><?= systemDesc ?></span>
           <span class="transition-transform duration-200 group-open:rotate-180 flex-shrink-0 ml-2">
             <svg class="h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
@@ -154,7 +156,7 @@
         </svg>
         <div>
           <h4 class="font-bold text-amber-900" id="login-warning-title">提示：需登入後才能送出請購</h4>
-          <p class="text-sm mt-1" id="login-warning-desc">目前為唯讀瀏覽狀態。您必須登入學校 @fhsh.khc.edu.tw 帳號後才能填寫並送出請購申請。</p>
+          <p class="text-sm mt-1" id="login-warning-desc">目前為唯讀瀏覽狀態。您必須登入學校 @<?= allowedDomain ?> 帳號後才能填寫並送出請購申請。</p>
         </div>
       </div>
 
@@ -489,17 +491,17 @@
     class="bg-slate-100 border-t border-slate-200 mt-auto py-3 text-center text-xs text-slate-500 font-medium sticky bottom-0 z-40 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
     <div
       class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-center sm:space-x-4 space-y-1 sm:space-y-0">
-      <div class="text-slate-700 font-semibold tracking-wide text-sm">國立鳳新高級中學 &copy; National Feng-Hsin Senior High
-        School</div>
+      <div class="text-slate-700 font-semibold tracking-wide text-sm"><?= schoolName ?></div>
       <div class="hidden sm:block text-slate-300">|</div>
-      <div>830038 高雄市鳳山區新富路257號</div>
+      <div><?= schoolAddress ?></div>
       <div class="hidden sm:block text-slate-300">|</div>
-      <div>總機：07-7658288．傳真：07-7658586</div>
+      <div><?= schoolPhone ?></div>
     </div>
   </footer>
 
   <script>
     var templateSessionToken = '<?= sessionToken ?>';
+    var allowedDomain = '<?= allowedDomain ?>';
 
     if (templateSessionToken) {
       localStorage.setItem('my_app_token', templateSessionToken);
@@ -748,7 +750,7 @@
           // 已登入但非學校網域
           loginWarning.classList.remove('hidden');
           document.getElementById('login-warning-title').innerText = '無效的帳號網域';
-          document.getElementById('login-warning-desc').innerText = '您目前登入的是 ' + currentUserEmail + '。請點擊右上方的「登出」並重新使用 @fhsh.khc.edu.tw 帳號登入。';
+          document.getElementById('login-warning-desc').innerText = '您目前登入的是 ' + currentUserEmail + '。請點擊右上方的「登出」並重新使用 @' + allowedDomain + ' 帳號登入。';
 
           submitBtn.disabled = true;
           submitBtn.innerText = '需使用學校帳號才能請購';
@@ -809,7 +811,7 @@
 
         DOM.loginWarning.classList.remove('hidden');
         document.getElementById('login-warning-title').innerText = '提示：需登入後才能送出請購';
-        document.getElementById('login-warning-desc').innerText = '目前為唯讀瀏覽狀態。您必須點擊右上方的「登入」按鈕，並使用學校 @fhsh.khc.edu.tw 帳號後才能填寫並送出請購申請。';
+        document.getElementById('login-warning-desc').innerText = '目前為唯讀瀏覽狀態。您必須點擊右上方的「登入」按鈕，並使用學校 @' + allowedDomain + ' 帳號後才能填寫並送出請購申請。';
 
         submitBtn.disabled = true;
         submitBtn.innerText = '需登入後才能送出請購';
@@ -901,8 +903,8 @@
 
       // 前端二次安全防護：確認信箱網域
       const emailVal = DOM.email.value.toLowerCase();
-      if (!emailVal.endsWith('@fhsh.khc.edu.tw')) {
-        alert('請先登入 @fhsh.khc.edu.tw 帳號後再送出申請。');
+      if (!emailVal.endsWith('@' + allowedDomain)) {
+        alert('請先登入 @' + allowedDomain + ' 帳號後再送出申請。');
         return;
       }
 

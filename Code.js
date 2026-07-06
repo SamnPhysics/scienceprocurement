@@ -1,16 +1,26 @@
 // ====== 全域變數定義 ======
-const CLIENT_ID = PropertiesService.getScriptProperties().getProperty('CLIENT_ID');
-const CLIENT_SECRET = PropertiesService.getScriptProperties().getProperty('CLIENT_SECRET');
+// 從屬性服務讀取環境參數
+const props = PropertiesService.getScriptProperties();
+const CLIENT_ID = props.getProperty('CLIENT_ID');
+const CLIENT_SECRET = props.getProperty('CLIENT_SECRET');
 
-// 物品藥品採購表單的填答試算表
-const SPREADSHEET_ID = '19kPC7jyRhmWXzy6gdkVQQTXUvwwdlPvlRzy15JtPvnA';
+
+const SPREADSHEET_ID = props.getProperty('SPREADSHEET_ID');
+const UPLOAD_FOLDER_ID = props.getProperty('FOLDER_ID');
+const WEB_APP_URL = props.getProperty('WEB_APP_URL');
+const ADMIN_BACKEND_URL = props.getProperty('ADMIN_BACKEND_URL');
+const ALLOWED_DOMAIN = props.getProperty('ALLOWED_DOMAIN');
+
 const SHEET_NAME = '表單回應 1';
-const ADMIN_EMAILS = ['5501@fhsh.khc.edu.tw', '5502@fhsh.khc.edu.tw'];
+
+// 取得管理員 Email 列表 (以逗號分隔)，並轉為陣列
+const ADMIN_EMAILS_STR = props.getProperty('ADMIN_EMAILS');
+const ADMIN_EMAILS = ADMIN_EMAILS_STR.split(',').map(function (e) { return e.trim(); });
 
 // 阻擋名單規則 (可以是正規表達式 RegExp，或是特定的 Email 字串)
 const BLOCKED_ACCOUNT_RULES = [
   /^\d{6}@/i,  // 阻擋學生帳號 (判斷邏輯：信箱開頭為 's' 加上數字，或純數字)
-  // 'example@fhsh.khc.edu.tw' // 未來若要阻擋特定帳號，可直接加在這裡
+  // 'example@' + ALLOWED_DOMAIN // 未來若要阻擋特定帳號，可直接加在這裡
 ];
 
 function isAdminUser(email) {
@@ -39,7 +49,7 @@ function testEmail() {
 
 // 動態取得 Web App URL
 function getAppUrl() {
-  return 'https://script.google.com/macros/s/AKfycbw02wBN2z_bXii67odSg_Xoqx11f4RWh9NOVvFBvFutkCT6Q6KtGsbVLtl9c-9KqZVC/exec';
+  return WEB_APP_URL;
 }
 
 // 供前端取得 Client ID
@@ -55,7 +65,7 @@ function getLoginUrl() {
     '&response_type=code' +
     '&scope=' + encodeURIComponent('openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile') +
     '&access_type=offline' +
-    '&hd=fhsh.khc.edu.tw';
+    '&hd=' + encodeURIComponent(ALLOWED_DOMAIN);
   return authUrl;
 }
 
@@ -71,8 +81,18 @@ function doGet(e) {
     template.sessionToken = e.parameter.session_token || '';
     template.appUrl = getAppUrl();
 
+    // 取得前端動態渲染參數
+    var p = PropertiesService.getScriptProperties();
+    template.schoolName = p.getProperty('SCHOOL_NAME');
+    template.schoolAddress = p.getProperty('SCHOOL_ADDRESS');
+    template.schoolPhone = p.getProperty('SCHOOL_PHONE');
+    template.systemTitle = p.getProperty('SYSTEM_TITLE');
+    template.systemDesc = p.getProperty('SYSTEM_DESC');
+    template.allowedDomain = p.getProperty('ALLOWED_DOMAIN');
+    template.logoId = p.getProperty('LOGO_ID');
+
     return template.evaluate()
-      .setTitle('自然科課程藥品/物品申請採購管理系統')
+      .setTitle(template.systemTitle)
       .addMetaTag('viewport', 'width=device-width, initial-scale=1')
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   }
@@ -188,7 +208,7 @@ function getAuthStatus(token) {
     var email = profile.email;
     var displayName = profile.name || email.split('@')[0];
 
-    if (!email.toLowerCase().endsWith('@fhsh.khc.edu.tw')) {
+    if (!email.toLowerCase().endsWith('@' + ALLOWED_DOMAIN)) {
       return { loggedIn: true, email: email, displayName: displayName, role: "invalid", message: "非學校網域帳號" };
     }
 
@@ -211,8 +231,8 @@ function submitApplication(formData, token) {
   try {
     var profile = verifySessionToken(token);
     var email = profile.email;
-    if (!email || !email.toLowerCase().endsWith('@fhsh.khc.edu.tw')) {
-      return { success: false, message: '提交失敗：您必須登入學校網域帳號 (@fhsh.khc.edu.tw) 才能進行申請！' };
+    if (!email || !email.toLowerCase().endsWith('@' + ALLOWED_DOMAIN)) {
+      return { success: false, message: '提交失敗：您必須登入學校網域帳號 (@' + ALLOWED_DOMAIN + ') 才能進行申請！' };
     }
 
     // 阻擋帳號防護 (後端二次檢查)
@@ -248,7 +268,7 @@ function submitApplication(formData, token) {
       var blob = Utilities.newBlob(Utilities.base64Decode(base64Data), contentType, formData.photoName);
 
       // 建立檔案於指定的雲端硬碟資料夾
-      var folderId = '1YNxutMC0-sqU4qJM2JWp6o4jwYUXKkA-';
+      var folderId = UPLOAD_FOLDER_ID;
       var folder = DriveApp.getFolderById(folderId);
       var file = folder.createFile(blob);
       file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
@@ -296,7 +316,7 @@ function submitApplication(formData, token) {
         "數量：" + formData.quantity + "\n" +
         "使用時間：" + formData.usageTime + "\n" +
         "備註：" + (formData.remark || '無') + "\n\n" +
-        "請登入系統管理者後台查看詳細內容並進行審核： https://reurl.cc/537XAV";
+        "請登入系統管理者後台查看詳細內容並進行審核： " + ADMIN_BACKEND_URL;
 
       var htmlBodyStr = "系統收到一筆新的藥品/物品採購申請：<br><br>" +
         "<b>申請人：</b>" + applicant + "<br>" +
@@ -306,7 +326,7 @@ function submitApplication(formData, token) {
         "<b>數量：</b>" + formData.quantity + "<br>" +
         "<b>使用時間：</b>" + formData.usageTime + "<br>" +
         "<b>備註：</b>" + (formData.remark || '無') + "<br><br>" +
-        "請 <a href='https://reurl.cc/537XAV'>登入系統管理者後台</a> 查看詳細內容並進行審核。";
+        "請 <a href='" + ADMIN_BACKEND_URL + "'>登入系統管理者後台</a> 查看詳細內容並進行審核。";
 
       GmailApp.sendEmail(ADMIN_EMAILS.join(","), subjectStr, bodyStr, {
         htmlBody: htmlBodyStr,
@@ -342,7 +362,7 @@ function getUserData(token) {
   try {
     var profile = verifySessionToken(token);
     var email = profile.email;
-    if (!email || !email.toLowerCase().endsWith('@fhsh.khc.edu.tw')) {
+    if (!email || !email.toLowerCase().endsWith('@' + ALLOWED_DOMAIN)) {
       return [];
     }
     var normalizedEmail = email.toLowerCase().trim();
@@ -396,7 +416,7 @@ function deleteUserRequests(rowNumbers, token) {
   try {
     var profile = verifySessionToken(token);
     var email = profile.email;
-    if (!email || !email.toLowerCase().endsWith('@fhsh.khc.edu.tw')) {
+    if (!email || !email.toLowerCase().endsWith('@' + ALLOWED_DOMAIN)) {
       return { success: false, message: '操作失敗：驗證身分失敗。' };
     }
 
@@ -520,4 +540,55 @@ function getSheetData() {
   } catch (e) { }
 
   return reversedData;
+}
+
+// ====== 開發者輔助設定區 ======
+/**
+ * 首次建置環境或轉移環境時，可於編輯器內執行此函式
+ * 以便將環境變數寫入 PropertiesService 中
+ */
+function setupProperties() {
+  const props = PropertiesService.getScriptProperties();
+  props.setProperties({
+    // 【必填】存放申請表單資料的 Google 試算表 ID (從網址中擷取)
+    'SPREADSHEET_ID': '請設定 SPREADSHEET_ID',
+
+    // 【必填】存放使用者上傳圖片的 Google Drive 資料夾 ID (必須設定為知道連結者可檢視)
+    'FOLDER_ID': '請設定 FOLDER_ID',
+
+    // 【必填】部署為網頁應用程式後的 URL (用於 OAuth 授權的 Redirect URI)
+    'WEB_APP_URL': '請設定 WEB_APP_URL',
+
+    // 【選填】發送給管理員信件中附帶的後台短網址 (或與 WEB_APP_URL 相同亦可)
+    'ADMIN_BACKEND_URL': '請設定 ADMIN_BACKEND_URL',
+
+    // 【必填】系統管理員的信箱列表，以逗號分隔 (擁有後台審核權限及收信權限)
+    'ADMIN_EMAILS': '請設定 ADMIN_EMAILS',
+
+    // 【必填】允許登入的組織網域，例如 fhsh.khc.edu.tw (未設定則無法進行網域限制)
+    'ALLOWED_DOMAIN': '請設定 ALLOWED_DOMAIN',
+
+    // 【選填】前端介面顯示的學校名稱
+    'SCHOOL_NAME': '請設定 SCHOOL_NAME',
+
+    // 【選填】前端介面 Footer 顯示的學校地址
+    'SCHOOL_ADDRESS': '請設定 SCHOOL_ADDRESS',
+
+    // 【選填】前端介面 Footer 顯示的學校聯絡電話
+    'SCHOOL_PHONE': '請設定 SCHOOL_PHONE',
+
+    // 【選填】系統的標題名稱 (顯示於網頁標題與上方導覽列)，可自行更換
+    'SYSTEM_TITLE': '請設定 SYSTEM_TITLE',
+
+    // 【選填】表單上方的系統詳細說明文字
+    'SYSTEM_DESC': '請設定 SYSTEM_DESC',
+
+    // 【選填】前端介面左上角的 Logo 圖片 (Google Drive 檔案 ID)
+    'LOGO_ID': '請設定 LOGO_ID',
+
+    // 注意：CLIENT_ID 與 CLIENT_SECRET 用來連接GCP相關資料
+    'CLIENT_ID': '',
+    'CLIENT_SECRET': ''
+  });
+  Logger.log('環境變數設定完成！');
 }
