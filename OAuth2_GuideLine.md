@@ -18,6 +18,38 @@
 
 ---
 
+## 🗺️ 系統架構圖 (System Architecture)
+
+```mermaid
+graph TD
+    Client[前端網頁介面 Browser<br>Index.html + Tailwind CSS]
+    
+    subgraph Google Apps Script 後端
+        GAS[API 路由與核心邏輯<br>Code.js]
+        Cache[(CacheService<br>暫存 Session Token)]
+    end
+    
+    subgraph Google 雲端服務
+        OAuth[Google OAuth 2.0<br>授權中心]
+        Sheets[(Google 試算表<br>資料庫)]
+        Drive[(Google 雲端硬碟<br>檔案儲存)]
+        Mail[Gmail<br>信件通知]
+    end
+
+    Client -- 1. 登入請求 --> OAuth
+    OAuth -- 2. 回傳授權碼 --> Client
+    Client -- 3. 交換 Token --> GAS
+    GAS -- 4. 驗證並取得個資 --> OAuth
+    GAS -- 5. 儲存 Session 綁定 --> Cache
+    
+    Client -- 6. 攜帶 Token 呼叫 API --> GAS
+    GAS -- 讀寫請購資料 --> Sheets
+    GAS -- 儲存上傳圖片 --> Drive
+    GAS -- 寄送審核通知信 --> Mail
+```
+
+---
+
 ## 🏗️ 系統運作原理（白話文版）
 
 ```mermaid
