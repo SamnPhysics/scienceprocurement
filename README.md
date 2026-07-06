@@ -44,20 +44,25 @@
 ### 1. 準備工作 (GCP 憑證設定)
 詳情請見目錄下的 `OAuth2_GuideLine.md`。您必須先前往 Google Cloud Console 申請 **OAuth 2.0 用戶端 ID**，並取得 `CLIENT_ID` 與 `CLIENT_SECRET`。
 
-### 2. 環境變數設定
-進入 Apps Script 編輯器：
-1. 點擊 **專案設定 (齒輪圖示)**。
-2. 滑至底部的 **指令碼屬性**，新增以下兩個屬性：
-   - `CLIENT_ID`: 您的 OAuth 用戶端 ID
-   - `CLIENT_SECRET`: 您的 OAuth 用戶端密碼
+### 2. 環境變數與配置設定 (PropertiesService)
+本專案的機密資訊（如試算表 ID）與學校專屬文字已全面抽離至 **伺服器屬性 (PropertiesService)** 中，未來轉移專案時不需在程式碼內尋找並修改寫死的文字。
 
-### 3. 配置參數 (於 `Code.js`)
-您可依需求修改 `Code.js` 頂部的全域變數：
-- `SPREADSHEET_ID`: 作為資料庫的 Google 試算表 ID。
-- `ADMIN_EMAILS`: 允許進入管理者後台的電子信箱陣列。
-- `getAppUrl()`: 必須回傳您**正式發布的 Web App URL**。
+**快速設定步驟：**
+1. 準備好您的 `CLIENT_ID` 與 `CLIENT_SECRET` (來自 GCP OAuth 2.0 設定，詳見 `OAuth2_GuideLine.md`)。
+2. 開啟 `Code.js`，滑到檔案最下方的 `setupProperties()` 函式。
+3. 依照註解說明，填入您的環境變數與特定文字：
+   - `SPREADSHEET_ID`: 存放表單資料的 Google 試算表 ID。
+   - `FOLDER_ID`: 存放使用者上傳圖片的 Google Drive 資料夾 ID。
+   - `LOGO_ID`: 前端介面左上角的 Logo 圖片 (Google Drive 檔案 ID)。
+   - `WEB_APP_URL`: 您**正式發布的 Web App URL**。
+   - `ADMIN_EMAILS`: 管理員的 Email 列表 (逗號分隔)。
+   - `ALLOWED_DOMAIN`: 限定登入的組織/學校網域。
+   - `SCHOOL_NAME`, `SYSTEM_TITLE` ...等前端渲染文字。
+   - `CLIENT_ID` 與 `CLIENT_SECRET`。
+4. 在編輯器上方的下拉選單中，選擇 `setupProperties` 函式並按下 **執行**。
+5. (選用) 執行後，可點擊左側 **專案設定 (齒輪圖示)** > 滑至底部的 **指令碼屬性** 檢查所有已寫入的環境變數。
 
-### 4. 系統發布
+### 3. 系統發布
 1. 點擊右上方 **部署** > **管理部署作業**（或新增部署作業）。
 2. 網頁應用程式設定：
    - **執行身分**：`我 (開發者)`
