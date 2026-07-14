@@ -328,7 +328,7 @@ function submitApplication(formData, token) {
         "<b>備註：</b>" + (formData.remark || '無') + "<br><br>" +
         "請 <a href='" + ADMIN_BACKEND_URL + "'>登入系統管理者後台</a> 查看詳細內容並進行審核。";
 
-      GmailApp.sendEmail(ADMIN_EMAILS.join(","), subjectStr, bodyStr, {
+      MailApp.sendEmail(ADMIN_EMAILS.join(","), subjectStr, bodyStr, {
         htmlBody: htmlBodyStr,
         name: "自然科採購系統"
       });
