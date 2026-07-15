@@ -123,9 +123,25 @@
 
   <main class="max-w-7xl mx-auto px-4 py-8 flex-grow w-full">
 
-    <!-- 1. 請購表單頁面 -->
     <div id="view-apply" class="block max-w-2xl mx-auto bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-      <h2 class="text-xl font-bold text-slate-900 mb-6 border-b pb-3">藥品 / 物品申請表單</h2>
+      <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b pb-3">
+        <h2 class="text-xl font-bold text-slate-900">藥品 / 物品申請表單</h2>
+        <div class="flex flex-wrap items-center gap-2">
+          <!-- 匯入範本下載 -->
+          <button type="button" onclick="downloadImportTemplate()"
+            class="px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded border border-emerald-200 hover:bg-emerald-100 text-sm font-medium transition shadow-sm flex items-center gap-1">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+            下載匯入範本
+          </button>
+          <!-- 匯入申請表 -->
+          <input type="file" id="batchExcelFile" accept=".xlsx, .xls" class="hidden" onchange="handleBatchImport(event)">
+          <button type="button" onclick="document.getElementById('batchExcelFile').click()"
+            class="px-3 py-1.5 bg-blue-50 text-blue-700 rounded border border-blue-200 hover:bg-blue-100 text-sm font-medium transition shadow-sm flex items-center gap-1">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+            匯入申請表
+          </button>
+        </div>
+      </div>
 
       <!-- 說明文字 -->
       <details class="mb-6 bg-blue-50 border border-blue-200 text-blue-800 p-4 rounded-lg text-sm leading-relaxed shadow-sm group cursor-pointer">
@@ -1564,6 +1580,144 @@
           tooltip.classList.add('hidden');
         }
       }, 150);
+    }
+
+    /* ---------------- 批次匯入 (Excel) ---------------- */
+    function downloadImportTemplate() {
+      if (typeof XLSX === 'undefined') {
+        alert('Excel 模組載入失敗，請檢查網路連線。');
+        return;
+      }
+
+      // 定義範本標頭
+      const templateData = [
+        {
+          '科別*': '物理',
+          '物品/藥品中文名稱*': '例如：氯化銅',
+          '藥品英文名稱(含化學式，分子量)*': '例如：Copper(II) sulfate CuSO4, MW: 159.6',
+          '單位*': '瓶',
+          '所需數量*': '2',
+          '物品分類/化學藥品狀態*': '固態藥品',
+          '藥品濃度(液態)': '',
+          '藥品容量(液態)': '',
+          '課程使用時間*': '2026-09-01T10:00',
+          '備註': '無'
+        }
+      ];
+
+      const ws = XLSX.utils.json_to_sheet(templateData);
+      
+      // 加入下拉選單提示 (SheetJS 免費版無法直接寫入 Data Validation，因此用註解或額外工作表提示，此處簡單調整欄寬)
+      const wscols = Object.keys(templateData[0]).map(key => ({ wch: Math.max(key.length * 2, 12) }));
+      ws['!cols'] = wscols;
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "批次匯入範本");
+      XLSX.writeFile(wb, '自然科採購_批次匯入範本.xlsx');
+    }
+
+    async function handleBatchImport(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      // 檢查是否登入
+      if (!currentUserEmail || !currentUserEmail.endsWith('@' + allowedDomain)) {
+        alert('請先登入 @' + allowedDomain + ' 帳號後再進行匯入。');
+        event.target.value = ''; // reset
+        return;
+      }
+
+      if (typeof XLSX === 'undefined') {
+        alert('Excel 模組載入失敗，請檢查網路連線。');
+        event.target.value = '';
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = async function(e) {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, {type: 'array'});
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, {raw: false});
+
+          if (!jsonData || jsonData.length === 0) {
+            alert('檔案中沒有資料，請確認檔案內容。');
+            return;
+          }
+
+          // 驗證與整理資料
+          const batchData = [];
+          for (let i = 0; i < jsonData.length; i++) {
+            const row = jsonData[i];
+            const rowNum = i + 2; // Excel row number (1-based header + 1-based index)
+            
+            // 嘗試取得必填欄位 (容忍標題有沒有 *)
+            const subject = row['科別*'] || row['科別'];
+            const chineseName = row['物品/藥品中文名稱*'] || row['物品/藥品中文名稱'];
+            const englishName = row['藥品英文名稱(含化學式，分子量)*'] || row['藥品英文名稱(含化學式，分子量)'] || row['藥品英文名稱(含化學式，分子量)或物品名稱'];
+            const unit = row['單位*'] || row['單位'];
+            const qty = row['所需數量*'] || row['所需數量'];
+            const category = row['物品分類/化學藥品狀態*'] || row['物品分類/化學藥品狀態'];
+            const usageTime = row['課程使用時間*'] || row['課程使用時間'];
+
+            if (!subject || !chineseName || !englishName || !unit || !qty || !category || !usageTime) {
+              alert(`第 ${rowNum} 列資料不完整！請確認所有標示 * 的必填欄位皆已填寫。`);
+              return; // 終止匯入
+            }
+
+            batchData.push({
+              subject: subject,
+              chineseName: chineseName,
+              englishName: englishName,
+              quantity: qty + ' ' + unit,
+              category: category,
+              concentration: row['藥品濃度(液態)'] || '',
+              volume: row['藥品容量(液態)'] || '',
+              usageTime: usageTime,
+              remark: row['備註'] || ''
+            });
+          }
+
+          const isConfirmed = await showConfirm(`成功解析 ${batchData.length} 筆資料，即將進行批次匯入。\n確認要匯入嗎？`);
+          if (isConfirmed) {
+            // 呼叫後端
+            const loadingOverlay = document.getElementById('loading-overlay');
+            if (loadingOverlay) {
+              loadingOverlay.querySelector('div.text-slate-600').textContent = '正在批次匯入資料，請稍候...';
+              loadingOverlay.classList.remove('hidden', 'opacity-0');
+            }
+
+            google.script.run
+              .withSuccessHandler(function (response) {
+                if (loadingOverlay) {
+                  loadingOverlay.classList.add('opacity-0');
+                  setTimeout(() => loadingOverlay.classList.add('hidden'), 300);
+                  loadingOverlay.querySelector('div.text-slate-600').textContent = '正在驗證您的身分與權限，請稍候...'; // 復原
+                }
+                alert(response.message);
+                if (response.success) {
+                  loadUserData(); // 重新載入個人清單
+                }
+              })
+              .withFailureHandler(function (err) {
+                if (loadingOverlay) {
+                  loadingOverlay.classList.add('opacity-0');
+                  setTimeout(() => loadingOverlay.classList.add('hidden'), 300);
+                  loadingOverlay.querySelector('div.text-slate-600').textContent = '正在驗證您的身分與權限，請稍候...';
+                }
+                alert('批次匯入失敗: ' + err);
+              })
+              .submitBatchApplication(batchData, localStorage.getItem('my_app_token'));
+          }
+        } catch (error) {
+          alert('解析 Excel 檔案發生錯誤：' + error.message);
+        } finally {
+          event.target.value = ''; // reset file input
+        }
+      };
+      reader.readAsArrayBuffer(file);
     }
   </script>
 </body>

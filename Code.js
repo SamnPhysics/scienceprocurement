@@ -343,6 +343,124 @@ function submitApplication(formData, token) {
   }
 }
 
+// 處理整批表單提交 (由 Excel 匯入)
+function submitBatchApplication(batchData, token) {
+  try {
+    var profile = verifySessionToken(token);
+    var email = profile.email;
+    if (!email || !email.toLowerCase().endsWith('@' + ALLOWED_DOMAIN)) {
+      return { success: false, message: '提交失敗：您必須登入學校網域帳號 (@' + ALLOWED_DOMAIN + ') 才能進行申請！' };
+    }
+
+    if (isBlockedUser(email)) {
+      return { success: false, message: '提交失敗：您的帳號禁止使用此系統！' };
+    }
+
+    if (!batchData || batchData.length === 0) {
+      return { success: false, message: '提交失敗：匯入的資料為空。' };
+    }
+
+    var applicant = (profile.name || email.split('@')[0] || '').toString();
+    var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    var sheet = ss.getSheetByName(SHEET_NAME);
+
+    if (!sheet) {
+      sheet = ss.insertSheet(SHEET_NAME);
+      sheet.appendRow([
+        '時間戳記', '物品/藥品中文名稱', '藥品英文名稱(含化學式，分子量)或物品名稱',
+        '所需數量', '物品分類/化學藥品狀態', '藥品濃度(液態)',
+        '課程使用時間', '請勾選所需科別', '申請人', '電子郵件地址',
+        '物品/藥品照片', '藥品容量(液態)', '是否請購', '備註', '採購總價'
+      ]);
+    }
+
+    var lock = LockService.getScriptLock();
+    if (!lock.tryLock(30000)) { // 批次寫入允許較長的 lock
+      return { success: false, message: '提交失敗：系統目前忙碌中，請稍後再試。' };
+    }
+
+    try {
+      var rowsToInsert = [];
+      var timestamp = new Date();
+
+      for (var i = 0; i < batchData.length; i++) {
+        var item = batchData[i];
+        rowsToInsert.push([
+          timestamp,
+          item.chineseName || '',
+          item.englishName || '',
+          item.quantity || '',
+          item.category || '',
+          item.concentration || '無',
+          item.usageTime || '',
+          item.subject || '',
+          applicant,
+          email,
+          '無照片', // 批次匯入目前不支援照片
+          item.volume || '無',
+          '未請購',
+          item.remark || '',
+          ''
+        ]);
+      }
+
+      // 批次寫入
+      var lastRow = sheet.getLastRow();
+      sheet.getRange(lastRow + 1, 1, rowsToInsert.length, rowsToInsert[0].length).setValues(rowsToInsert);
+
+      CacheService.getScriptCache().remove('sheet_data_cache');
+    } finally {
+      lock.releaseLock();
+    }
+
+    // 發送 Email 通知給管理者
+    try {
+      var subjectStr = "【新採購申請通知】" + applicant + " 提交了 " + batchData.length + " 筆批次申請";
+      
+      // 整理批次匯入的項目清單 (最多顯示 20 筆，避免信件過長)
+      var itemSummary = "";
+      var htmlItemSummary = "<ul>";
+      var displayLimit = Math.min(batchData.length, 20);
+      
+      for (var j = 0; j < displayLimit; j++) {
+        var itm = batchData[j];
+        itemSummary += "- " + itm.chineseName + " (" + itm.quantity + ")\n";
+        htmlItemSummary += "<li>" + itm.chineseName + " (" + itm.quantity + ")</li>";
+      }
+      
+      if (batchData.length > 20) {
+        itemSummary += "...以及其他 " + (batchData.length - 20) + " 項物品\n";
+        htmlItemSummary += "<li>...以及其他 " + (batchData.length - 20) + " 項物品</li>";
+      }
+      htmlItemSummary += "</ul>";
+
+      var bodyStr = "系統收到一批新的藥品/物品採購申請：\n\n" +
+        "申請人：" + applicant + "\n" +
+        "申請筆數：" + batchData.length + " 筆\n" +
+        "申請項目：\n" + itemSummary + "\n" +
+        "請登入系統管理者後台查看詳細內容並進行審核： " + ADMIN_BACKEND_URL;
+
+      var htmlBodyStr = "系統收到一批新的藥品/物品採購申請：<br><br>" +
+        "<b>申請人：</b>" + applicant + "<br>" +
+        "<b>申請筆數：</b>" + batchData.length + " 筆<br>" +
+        "<b>申請項目：</b>" + htmlItemSummary + "<br>" +
+        "請 <a href='" + ADMIN_BACKEND_URL + "'>登入系統管理者後台</a> 查看詳細內容並進行審核。";
+
+      MailApp.sendEmail(ADMIN_EMAILS.join(","), subjectStr, bodyStr, {
+        htmlBody: htmlBodyStr,
+        name: "自然科採購系統"
+      });
+    } catch (e) {
+      console.log("Email發送失敗: " + e.toString());
+      return { success: true, message: '批次資料提交成功！(但Email通知發送失敗：' + e.toString() + ')' };
+    }
+
+    return { success: true, message: '成功匯入 ' + batchData.length + ' 筆資料！' };
+  } catch (error) {
+    return { success: false, message: '後端錯誤: ' + error.toString() };
+  }
+}
+
 // 供管理者介面讀取所有資料
 function getAdminData(token) {
   try {
