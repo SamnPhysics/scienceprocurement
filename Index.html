@@ -75,10 +75,12 @@
   </dialog>
 
   <!-- 自訂浮動提示視窗 (Tooltip) -->
-  <div id="custom-tooltip" class="fixed hidden z-[100] bg-white border border-slate-200 shadow-2xl rounded-lg p-3 max-w-[280px] w-max pointer-events-none transition-opacity duration-150 opacity-0">
+  <div id="custom-tooltip"
+    class="fixed hidden z-[100] bg-white border border-slate-200 shadow-2xl rounded-lg p-3 max-w-[280px] w-max pointer-events-none transition-opacity duration-150 opacity-0">
     <div id="tooltip-remark" class="text-sm text-slate-700 font-medium whitespace-pre-wrap mb-2 leading-relaxed"></div>
     <div id="tooltip-photo-container" class="hidden">
-      <img id="tooltip-photo" src="" alt="照片預覽" class="w-full h-auto rounded border border-slate-100 object-contain max-h-48">
+      <img id="tooltip-photo" src="" alt="照片預覽"
+        class="w-full h-auto rounded border border-slate-100 object-contain max-h-48">
     </div>
     <div id="tooltip-no-photo" class="text-xs text-slate-400 italic hidden">無上傳照片</div>
   </div>
@@ -98,7 +100,9 @@
         <img src="https://drive.google.com/thumbnail?id=<?= logoId ?>&sz=w150" alt="Logo"
           class="h-8 w-auto object-contain">
         <? } ?>
-        <div class="font-bold text-lg tracking-wider"><?= systemTitle ?></div>
+        <div class="font-bold text-lg tracking-wider">
+          <?= systemTitle ?>
+        </div>
       </div>
       <div class="flex space-x-2">
         <button id="btn-apply" onclick="switchView('apply')"
@@ -130,23 +134,34 @@
           <!-- 匯入範本下載 -->
           <button type="button" onclick="downloadImportTemplate()"
             class="px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded border border-emerald-200 hover:bg-emerald-100 text-sm font-medium transition shadow-sm flex items-center gap-1">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+            </svg>
             下載匯入範本
           </button>
           <!-- 匯入申請表 -->
-          <input type="file" id="batchExcelFile" accept=".xlsx, .xls" class="hidden" onchange="handleBatchImport(event)">
+          <input type="file" id="batchExcelFile" accept=".xlsx, .xls" class="hidden"
+            onchange="handleBatchImport(event)">
           <button type="button" onclick="document.getElementById('batchExcelFile').click()"
             class="px-3 py-1.5 bg-blue-50 text-blue-700 rounded border border-blue-200 hover:bg-blue-100 text-sm font-medium transition shadow-sm flex items-center gap-1">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+            </svg>
             匯入申請表
           </button>
         </div>
       </div>
 
       <!-- 說明文字 -->
-      <details class="mb-6 bg-blue-50 border border-blue-200 text-blue-800 p-4 rounded-lg text-sm leading-relaxed shadow-sm group cursor-pointer">
-        <summary class="font-bold text-base text-blue-900 list-none flex justify-between items-center focus:outline-none">
-          <span><?= systemDesc ?></span>
+      <details
+        class="mb-6 bg-blue-50 border border-blue-200 text-blue-800 p-4 rounded-lg text-sm leading-relaxed shadow-sm group cursor-pointer">
+        <summary
+          class="font-bold text-base text-blue-900 list-none flex justify-between items-center focus:outline-none">
+          <span>
+            <?= systemDesc ?>
+          </span>
           <span class="transition-transform duration-200 group-open:rotate-180 flex-shrink-0 ml-2">
             <svg class="h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
@@ -172,7 +187,9 @@
         </svg>
         <div>
           <h4 class="font-bold text-amber-900" id="login-warning-title">提示：需登入後才能送出請購</h4>
-          <p class="text-sm mt-1" id="login-warning-desc">目前為唯讀瀏覽狀態。您必須登入學校 @<?= allowedDomain ?> 帳號後才能填寫並送出請購申請。</p>
+          <p class="text-sm mt-1" id="login-warning-desc">目前為唯讀瀏覽狀態。您必須登入學校 @
+            <?= allowedDomain ?> 帳號後才能填寫並送出請購申請。
+          </p>
         </div>
       </div>
 
@@ -446,7 +463,11 @@
           <button onclick="exportAdminDataToExcel()"
             class="px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded border border-emerald-200 hover:bg-emerald-100 text-sm font-medium transition shadow-sm">
             <div class="flex items-center space-x-1">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
+                </path>
+              </svg>
               <span>匯出 Excel</span>
             </div>
           </button>
@@ -507,11 +528,17 @@
     class="bg-slate-100 border-t border-slate-200 mt-auto py-3 text-center text-xs text-slate-500 font-medium sticky bottom-0 z-40 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
     <div
       class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-center sm:space-x-4 space-y-1 sm:space-y-0">
-      <div class="text-slate-700 font-semibold tracking-wide text-sm"><?= schoolName ?></div>
+      <div class="text-slate-700 font-semibold tracking-wide text-sm">
+        <?= schoolName ?>
+      </div>
       <div class="hidden sm:block text-slate-300">|</div>
-      <div><?= schoolAddress ?></div>
+      <div>
+        <?= schoolAddress ?>
+      </div>
       <div class="hidden sm:block text-slate-300">|</div>
-      <div><?= schoolPhone ?></div>
+      <div>
+        <?= schoolPhone ?>
+      </div>
     </div>
   </footer>
 
@@ -790,7 +817,7 @@
           } else {
             btnAdmin.classList.add('hidden');
           }
-          
+
           loadUserData(true); // 背景預先載入個人申請資料
         }
       } else {
@@ -1049,17 +1076,17 @@
           }
         }
       });
-      
+
       // Tooltip Event Delegation
-      document.body.addEventListener('mouseover', function(e) {
+      document.body.addEventListener('mouseover', function (e) {
         const tr = e.target.closest('tr.tooltip-trigger');
         if (tr) showCustomTooltip(tr);
       });
-      document.body.addEventListener('mousemove', function(e) {
+      document.body.addEventListener('mousemove', function (e) {
         const tr = e.target.closest('tr.tooltip-trigger');
         if (tr) moveCustomTooltip(e);
       });
-      document.body.addEventListener('mouseout', function(e) {
+      document.body.addEventListener('mouseout', function (e) {
         const tr = e.target.closest('tr.tooltip-trigger');
         if (tr && !tr.contains(e.relatedTarget)) hideCustomTooltip();
       });
@@ -1422,7 +1449,7 @@
       }));
 
       const ws = XLSX.utils.json_to_sheet(exportData);
-      
+
       // 自動調整欄寬
       const wscols = Object.keys(exportData[0]).map(key => ({ wch: Math.max(key.length * 2, 12) }));
       ws['!cols'] = wscols;
@@ -1433,7 +1460,7 @@
       const yearStr = DOM.adminFilterYear.value ? DOM.adminFilterYear.value + '年' : '全部年份';
       const monthStr = DOM.adminFilterMonth.value ? DOM.adminFilterMonth.value + '月' : '全部月份';
       const applicantStr = DOM.adminFilterApplicant.value.trim() ? '_' + DOM.adminFilterApplicant.value.trim() : '';
-      
+
       const fileName = `採購清單_${yearStr}_${monthStr}${applicantStr}.xlsx`;
 
       XLSX.writeFile(wb, fileName);
@@ -1518,9 +1545,9 @@
 
       const remark = element.getAttribute('data-remark');
       const photoUrl = element.getAttribute('data-photo');
-      
+
       DOM.tooltipRemark.textContent = '備註：\n' + remark;
-      
+
       if (photoUrl && photoUrl !== '無照片') {
         let previewUrl = photoUrl;
         const match = photoUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
@@ -1541,7 +1568,7 @@
         DOM.tooltipPhotoContainer.classList.add('hidden');
         DOM.tooltipNoPhoto.classList.remove('hidden');
       }
-      
+
       tooltip.classList.remove('hidden');
       // 強制重繪以觸發動畫
       void tooltip.offsetWidth;
@@ -1551,21 +1578,21 @@
     function moveCustomTooltip(event) {
       const tooltip = DOM.customTooltip;
       if (!tooltip || tooltip.classList.contains('hidden')) return;
-      
+
       let x = event.clientX + 15;
       let y = event.clientY + 15;
-      
+
       const rect = tooltip.getBoundingClientRect();
       const viewportWidth = window.innerWidth;
       const viewportHeight = window.innerHeight;
-      
+
       if (x + rect.width > viewportWidth) {
         x = event.clientX - rect.width - 15;
       }
       if (y + rect.height > viewportHeight) {
         y = event.clientY - rect.height - 15;
       }
-      
+
       tooltip.style.left = x + 'px';
       tooltip.style.top = y + 'px';
     }
@@ -1573,7 +1600,7 @@
     function hideCustomTooltip() {
       const tooltip = DOM.customTooltip;
       if (!tooltip) return;
-      
+
       tooltip.classList.add('opacity-0');
       setTimeout(() => {
         if (tooltip.classList.contains('opacity-0')) {
@@ -1595,18 +1622,18 @@
           '科別*': '物理',
           '物品/藥品中文名稱*': '例如：氯化銅',
           '藥品英文名稱(含化學式，分子量)*': '例如：Copper(II) sulfate CuSO4, MW: 159.6',
-          '單位*': '瓶',
+          '單位*': '例如：瓶、包、克',
           '所需數量*': '2',
-          '物品分類/化學藥品狀態*': '固態藥品',
-          '藥品濃度(液態)': '',
-          '藥品容量(液態)': '',
-          '課程使用時間*': '2026-09-01T10:00',
+          '物品分類/化學藥品狀態*': '例如：固態藥品(顆粒)、固態藥品(粉末)、液態藥品、實驗器材、活體、肉類、蔬菜、其他',
+          '藥品濃度(液態)': '例如：1M、500ppm、75%',
+          '藥品容量(液態)': '例如：500ml',
+          '課程使用時間*': '例如：2026-09-01T10:00',
           '備註': '無'
         }
       ];
 
       const ws = XLSX.utils.json_to_sheet(templateData);
-      
+
       // 加入下拉選單提示 (SheetJS 免費版無法直接寫入 Data Validation，因此用註解或額外工作表提示，此處簡單調整欄寬)
       const wscols = Object.keys(templateData[0]).map(key => ({ wch: Math.max(key.length * 2, 12) }));
       ws['!cols'] = wscols;
@@ -1634,13 +1661,13 @@
       }
 
       const reader = new FileReader();
-      reader.onload = async function(e) {
+      reader.onload = async function (e) {
         try {
           const data = new Uint8Array(e.target.result);
-          const workbook = XLSX.read(data, {type: 'array'});
+          const workbook = XLSX.read(data, { type: 'array' });
           const firstSheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[firstSheetName];
-          const jsonData = XLSX.utils.sheet_to_json(worksheet, {raw: false});
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false });
 
           if (!jsonData || jsonData.length === 0) {
             alert('檔案中沒有資料，請確認檔案內容。');
@@ -1652,7 +1679,7 @@
           for (let i = 0; i < jsonData.length; i++) {
             const row = jsonData[i];
             const rowNum = i + 2; // Excel row number (1-based header + 1-based index)
-            
+
             // 嘗試取得必填欄位 (容忍標題有沒有 *)
             const subject = row['科別*'] || row['科別'];
             const chineseName = row['物品/藥品中文名稱*'] || row['物品/藥品中文名稱'];
