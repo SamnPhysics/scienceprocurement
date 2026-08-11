@@ -1,0 +1,160 @@
+<script>
+  // ==========================================
+  // js-core.html — 核心工具與全域初始化
+  // 職責：Session Token、debounce、DOM 快取、全域狀態宣告
+  // 載入順序：最優先，其他所有模組依賴此模組
+  // ==========================================
+
+  var templateSessionToken = '<?= sessionToken ?>';
+  var allowedDomain = '<?= allowedDomain ?>';
+
+  if (templateSessionToken) {
+    localStorage.setItem('my_app_token', templateSessionToken);
+    if (google && google.script && google.script.history) {
+      google.script.history.replace(null, {}, null);
+    } else {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }
+
+  // 共用防抖函數 (Debounce)
+  function debounce(func, wait) {
+    let timeout;
+    return function (...args) {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => func.apply(this, args), wait);
+    };
+  }
+
+  // 取得 auth token 的統一包裝（集中管理 localStorage key）
+  function getToken() {
+    return localStorage.getItem('my_app_token');
+  }
+
+  // 通用 HTML 樣板渲染器：配合獨立 HTML 檔案中的 HTML5 <template> 進行佔位符取代
+  function renderTemplate(templateId, data = {}) {
+    const tpl = document.getElementById(templateId);
+    if (!tpl) {
+      console.error('Template not found:', templateId);
+      return '';
+    }
+    return tpl.innerHTML.replace(/{{(\w+)}}/g, (match, key) => {
+      return data[key] !== undefined ? data[key] : '';
+    });
+  }
+
+  // DOM 元素快取
+  const DOM = {};
+
+  function initDOM() {
+    const ids = [
+      'photoFile', 'paste-zone', 'preview-container', 'upload-prompt', 'image-preview',
+      'equipBorrow_photoFile', 'equipBorrow_paste-zone', 'equipBorrow_preview-container', 'equipBorrow_upload-prompt', 'equipBorrow_image-preview',
+      'adminTableBody', 'admin-page-info', 'admin-filter-year', 'admin-filter-month', 'admin-filter-applicant',
+      'userTableBody', 'user-page-info', 'user-filter-year', 'user-filter-month',
+      'btn-apply', 'btn-user-list', 'btn-admin', 'btn-settings', 'settings-content', 'main-content',
+      'login-warning', 'submitBtn', 'btn-login-logout', 'email', 'applicant',
+      'category', 'otherCategory', 'concentration-block', 'concentration', 'volume', 'other-category-block',
+      'chineseName', 'englishName', 'quantity', 'unit', 'usageTime', 'remark', 'appForm'
+    ];
+    ids.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        const camelKey = id.replace(/-([a-z])/g, (g) => g[1].toUpperCase());
+        DOM[camelKey] = el;
+      }
+    });
+  }
+
+  // 全域權限狀態 - 使用 var 宣告使其順利掛載於 window 物件供各子模組共用與取用
+  var currentUserEmail = '';
+  var currentUserDisplayName = '';
+  window.currentUserEmail = '';
+  window.currentUserDisplayName = '';
+
+  // 全域頁面狀態
+  let currentSystemTab = 'equipBorrow';
+  let currentActionView = 'apply';
+
+  // 功能旗標：第二階段先預設關閉 tooltip，可快速回滾
+  window.APP_FEATURES = Object.assign({ tooltip: false }, window.APP_FEATURES || {});
+
+  // 初始化 DOM 快取並設置初始未登入狀態
+  initDOM();
+
+  // GAS API Promise 包裝器
+  window.callGas = function(functionName, ...args) {
+    return new Promise((resolve, reject) => {
+      google.script.run
+        .withSuccessHandler(resolve)
+        .withFailureHandler(reject)
+        [functionName](...args);
+    });
+  };
+
+  // 全域快取與靜默更新管理器 (Stale-While-Revalidate)
+  window.SystemCache = {
+    data: {},
+    lastFetch: {},
+    fetchStatus: {},
+    callbacks: {},
+
+    // fetchData: 實作背景預載與 30秒防護靜默更新
+    fetchData: function(key, apiCallerPromiseFactory, callback, force = false) {
+      const now = Date.now();
+      
+      // 1. 若有快取，立即呼叫 callback 渲染 (Stale)
+      if (this.data[key]) {
+        if (callback) callback(this.data[key]);
+      }
+      
+      // 2. 30秒防護網 (除非 force=true)
+      if (!force && this.lastFetch[key] && (now - this.lastFetch[key] < 30000)) {
+        // 如果沒有快取資料(剛好被清空)，還是必須抓取
+        if (this.data[key]) return;
+      }
+      
+      // 防止重複發送相同的請求
+      if (this.fetchStatus[key] === 'loading') {
+        if (callback) {
+          if (!this.callbacks[key]) this.callbacks[key] = [];
+          this.callbacks[key].push(callback);
+        }
+        return;
+      }
+      
+      // 3. 發送背景請求 (Revalidate)
+      this.fetchStatus[key] = 'loading';
+      if (!this.callbacks[key]) this.callbacks[key] = [];
+      if (callback) this.callbacks[key].push(callback);
+      
+      apiCallerPromiseFactory()
+        .then(newData => {
+          this.data[key] = newData;
+          this.lastFetch[key] = Date.now();
+          this.fetchStatus[key] = 'idle';
+          // 靜默更新：抓完後再次呼叫所有等待中的 callbacks 更新畫面
+          if (this.callbacks[key]) {
+            this.callbacks[key].forEach(cb => cb(newData));
+            this.callbacks[key] = [];
+          }
+        })
+        .catch(err => {
+          this.fetchStatus[key] = 'idle';
+          console.error(`SystemCache fetch error for ${key}:`, err);
+          // 只有在畫面上沒資料時才報錯，避免干擾使用者
+          if (this.callbacks[key]) {
+            if (!this.data[key]) {
+               this.callbacks[key].forEach(cb => cb(null, err));
+            }
+            this.callbacks[key] = [];
+          }
+        });
+    },
+    
+    // 使快取過期 (例如表單送出後，強制下次更新)
+    invalidate: function(key) {
+      this.lastFetch[key] = 0;
+    }
+  };
+</script>

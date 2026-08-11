@@ -1,0 +1,206 @@
+<div id="view-apply-equip" class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 hidden">
+  <h2 class="text-xl font-bold text-slate-900 mb-6 border-b pb-3">教學及實驗設備需求申請表</h2>
+  <details
+    class="mb-6 bg-blue-50 border border-blue-200 text-blue-800 p-4 rounded-lg text-sm leading-relaxed shadow-sm group cursor-pointer">
+    <summary class="font-bold text-base text-blue-900 list-none flex justify-between items-center focus:outline-none">
+      <span>
+        供教師提出需求登記，並依照年度預算及相關補助計畫辦理採購
+      </span>
+      <span class="transition-transform duration-200 group-open:rotate-180 flex-shrink-0 ml-2">
+        <svg class="h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+        </svg>
+      </span>
+    </summary>
+    <div class="mt-3 border-t border-blue-200 pt-3">
+      <ol class="list-decimal list-inside space-y-1.5 ml-1 text-blue-800">
+        <li>圖書、影音光碟 請洽圖書館填寫需求。</li>
+        <li>不包含文具用品。</li>
+        <li>依據填報的急迫性以及可執行性做優先次序安排，並非填了就能立即處理，請各位老師見諒。</li>
+        <li>一次僅限填一項設備，如果有多項設備，請重複填寫。</li>
+        <li>設備包含 硬體與軟體。惟需注意該軟體若無國內代理商，恕無法辦理相關採購程序。</li>
+        <li>若專科教室的電腦、單槍、擴音設備 也請一併填寫。 </li>
+        <li>若為教室修繕工程，須由【改善或充實國立高級中等學校一般建築及設備計畫】支應，與總務處合作辦理。</li>
+      </ol>
+    </div>
+  </details>
+
+  <form id="equipForm" onsubmit="handleEquipFormSubmit(event)" class="space-y-5">
+    <div>
+      <label class="block text-sm font-semibold text-slate-700 mb-1">申請人</label>
+      <input type="text" id="equip_applicant" name="applicant" required readonly
+        class="w-full rounded-md border-slate-300 bg-slate-100 px-3 py-2 text-slate-600 border focus:outline-none">
+    </div>
+    <input type="hidden" id="equip_email" name="email">
+
+    <div>
+      <label class="block text-sm font-semibold text-slate-700 mb-1">申請科別 <span class="text-red-500">*</span></label>
+      <select id="equip_applySubject" name="applySubject" required
+        class="w-full rounded-md border-slate-300 px-3 py-2 border bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none">
+        <option value="" disabled selected>請選擇申請科別</option>
+        <option value="國文科">國文科</option>
+        <option value="英文科">英文科</option>
+        <option value="數學科">數學科</option>
+        <option value="自然科">自然科</option>
+        <option value="社會科">社會科</option>
+        <option value="藝能科">藝能科</option>
+      </select>
+      <p class="text-xs text-slate-500">以教學研究會做分類</p>
+    </div>
+
+    <div>
+      <label class="block text-sm font-semibold text-slate-700 mb-1">設備名稱/軟體名稱 <span
+          class="text-red-500">*</span></label>
+      <input type="text" id="equip_name" name="equipName" required
+        class="w-full rounded-md border-slate-300 px-3 py-2 border focus:ring-2 focus:ring-blue-500 focus:outline-none placeholder-yellow-600"
+        placeholder="例如：數位顯微鏡">
+      <p class="text-xs text-slate-500">請明確說明設備或軟體名稱，方便設備組尋找廠商並估價。</p>
+
+    </div>
+
+
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label class="block text-sm font-semibold text-slate-700 mb-1">數量 <span class="text-red-500">*</span></label>
+        <input type="number" id="equip_quantity" name="quantity" min="1" required
+          class="w-full rounded-md border-slate-300 px-3 py-2 border focus:ring-2 focus:ring-blue-500 focus:outline-none">
+      </div>
+      <div>
+        <label class="block text-sm font-semibold text-slate-700 mb-1">自估單價<span class="text-red-500">*</span></label>
+        <input type="number" id="equip_price" name="price" min="0" required
+          class="w-full rounded-md border-slate-300 px-3 py-2 border focus:ring-2 focus:ring-blue-500 focus:outline-none">
+        <p class="text-xs text-slate-500">知道設備單價，請先預填，方便設備組寫計畫。若不知道單價，請填0。</p>
+      </div>
+    </div>
+
+    <div>
+      <label class="block text-sm font-semibold text-slate-700 mb-1">需求及用途說明 <span class="text-red-500">*</span></label>
+      <textarea id="equip_purpose" name="purpose" rows="3" required
+        class="w-full rounded-md border-slate-300 px-3 py-2 border focus:ring-2 focus:ring-blue-500 focus:outline-none"
+        placeholder="請詳細填寫，設備用途、預計實施班級與人數等資訊。如：數位顯微鏡，預計用於高一生物實驗，全班40人，進行植物細胞觀察實驗。"></textarea>
+    </div>
+
+    <div>
+      <label class="block text-sm font-semibold text-slate-700 mb-1">是否為課綱表定設備 <span
+          class="text-red-500">*</span></label>
+      <div class="space-y-2 mt-2">
+        <label class="inline-flex items-center mr-4">
+          <input type="radio" name="isSyllabus" value="課綱表定設備" class="text-blue-600 focus:ring-blue-500" required>
+          <span class="ml-2 text-slate-700">課綱表定設備</span>
+        </label>
+        <label class="inline-flex items-center mr-4">
+          <input type="radio" name="isSyllabus" value="非課綱表定設備" class="text-blue-600 focus:ring-blue-500">
+          <span class="ml-2 text-slate-700">非課綱表定設備</span>
+        </label>
+        <label class="inline-flex items-center mr-4">
+          <input type="radio" name="isSyllabus" value="資訊軟體" class="text-blue-600 focus:ring-blue-500">
+          <span class="ml-2 text-slate-700">資訊軟體</span>
+        </label>
+        <label class="inline-flex items-center">
+          <input type="radio" name="isSyllabus" value="資訊硬體(數位載具)" class="text-blue-600 focus:ring-blue-500">
+          <span class="ml-2 text-slate-700">資訊硬體(數位載具)</span>
+        </label>
+      </div>
+    </div>
+
+    <div>
+      <label class="block text-sm font-semibold text-slate-700 mb-1">設備或軟體存置地點 <span
+          class="text-red-500">*</span></label>
+      <div class="space-y-2 mt-2">
+        <label class="inline-flex items-center mr-4">
+          <input type="radio" name="location" value="行政教學大樓" class="text-blue-600 focus:ring-blue-500" required>
+          <span class="ml-2 text-slate-700">行政教學大樓</span>
+        </label>
+        <label class="inline-flex items-center mr-4">
+          <input type="radio" name="location" value="人文大樓" class="text-blue-600 focus:ring-blue-500">
+          <span class="ml-2 text-slate-700">人文大樓</span>
+        </label>
+        <label class="inline-flex items-center mr-4">
+          <input type="radio" name="location" value="松炎樓" class="text-blue-600 focus:ring-blue-500">
+          <span class="ml-2 text-slate-700">松炎樓</span>
+        </label>
+        <label class="inline-flex items-center mr-4">
+          <input type="radio" name="location" value="圖書館" class="text-blue-600 focus:ring-blue-500">
+          <span class="ml-2 text-slate-700">圖書館</span>
+        </label>
+        <label class="inline-flex items-center mr-4">
+          <input type="radio" name="location" value="科教大樓" class="text-blue-600 focus:ring-blue-500">
+          <span class="ml-2 text-slate-700">科教大樓</span>
+        </label>
+        <label class="inline-flex items-center">
+          <input type="radio" name="location" value="活動中心" class="text-blue-600 focus:ring-blue-500">
+          <span class="ml-2 text-slate-700">活動中心</span>
+        </label>
+      </div>
+      <p class="text-xs text-slate-500">請填寫設備/軟體 購入後的放置地點。</p>
+    </div>
+
+    <div>
+      <label class="block text-sm font-semibold text-slate-700 mb-1">對應科別 <span class="text-red-500">*</span></label>
+      <select id="equip_correspondSubject" name="correspondSubject" required
+        class="w-full rounded-md border-slate-300 px-3 py-2 border bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none">
+        <option value="" disabled selected>請選擇對應科別</option>
+        <option value="不分科">不分科</option>
+        <option value="國文科">國文科</option>
+        <option value="英文科">英文科</option>
+        <option value="數學科">數學科</option>
+        <option value="物理科">物理科</option>
+        <option value="化學科">化學科</option>
+        <option value="生物科">生物科</option>
+        <option value="地球科學">地球科學</option>
+        <option value="歷史科">歷史科</option>
+        <option value="地理科">地理科</option>
+        <option value="公民科">公民科</option>
+        <option value="音樂科">音樂科</option>
+        <option value="美術科">美術科</option>
+        <option value="藝術與生活">藝術與生活</option>
+        <option value="生命教育">生命教育</option>
+        <option value="生涯規劃">生涯規劃</option>
+        <option value="家政">家政</option>
+        <option value="資訊科技">資訊科技</option>
+        <option value="體育">體育</option>
+        <option value="健康與護理">健康與護理</option>
+        <option value="全民國防">全民國防</option>
+      </select>
+      <p class="text-xs text-slate-500">請列出所需設備對應之教學科目。個人電腦、單槍、筆記型電腦等屬於【不分科】。</p>
+    </div>
+
+    <div>
+      <label class="block text-sm font-semibold text-slate-700 mb-1">設備/軟體照片</label>
+      <div id="equip_paste-zone" tabindex="0"
+        class="w-full border-2 border-dashed border-slate-300 rounded-lg p-6 text-center focus:outline-none focus:border-blue-500 hover:bg-slate-50 transition">
+        <div id="equip_upload-prompt">
+          <svg class="mx-auto h-8 w-8 text-slate-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          <p class="text-sm text-slate-600 mb-1">點擊選擇照片，或在此處 <kbd
+              class="px-1 py-0.5 border rounded bg-slate-100 text-xs text-slate-600 font-mono">Ctrl+V</kbd> 貼上圖片</p>
+          <input type="file" id="equip_photoFile" accept="image/*" class="hidden">
+          <button type="button" onclick="document.getElementById('equip_photoFile').click()"
+            class="mt-2 px-4 py-1.5 bg-slate-200 hover:bg-slate-300 rounded-md text-sm text-slate-700 font-medium transition">選擇檔案</button>
+        </div>
+
+        <div id="equip_preview-container" class="hidden relative inline-block mt-2">
+          <img id="equip_image-preview" src="" alt="圖片預覽"
+            class="max-h-48 rounded shadow-sm border border-slate-200 object-contain">
+          <button type="button" id="equip_btn-remove-image" onclick="removeImage(event, 'equip')"
+            class="absolute -top-2 -right-2 bg-rose-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-rose-600 shadow-md">✕</button>
+          <p id="equip_image-filename" class="text-xs text-slate-500 mt-2 truncate max-w-xs"></p>
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-8 flex justify-end gap-3 pt-4 border-t">
+      <button type="button" onclick="resetEquipForm()"
+        class="px-5 py-2.5 rounded-lg border border-slate-300 text-slate-700 font-medium hover:bg-slate-50 transition duration-200">
+        清除重填
+      </button>
+      <button type="submit" id="equip_submitBtn"
+        class="px-5 py-2.5 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition duration-200 shadow-sm flex items-center">
+        <span>送出申請</span>
+      </button>
+    </div>
+  </form>
+</div>

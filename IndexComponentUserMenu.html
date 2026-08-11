@@ -1,0 +1,19 @@
+<div id="user-dropdown-menu"
+  class="hidden absolute right-0 top-full mt-1 w-64 bg-white rounded-md shadow-lg py-0 z-50 border border-slate-200 transform origin-top-right transition-all overflow-hidden">
+  <div id="dropdown-greeting"
+    class="px-4 py-3 text-lg text-slate-600 bg-slate-200/70 border-b border-slate-200 hidden tracking-wide">
+  </div>
+  <a href="javascript:void(0)" id="dropdown-user-list-equipBorrow" onclick="switchView('user-list', 'equipBorrow')"
+    class="block px-4 py-3 text-[17px] text-slate-700 hover:bg-slate-100 hidden tracking-wide"><i
+      class="fa-solid fa-list-ul mr-1 w-4 text-center"></i> 設備借用清單</a>
+  <a href="javascript:void(0)" id="dropdown-user-list-chem" onclick="switchView('user-list', 'chem')"
+    class="block px-4 py-3 text-[17px] text-slate-700 hover:bg-slate-100 hidden tracking-wide"><i
+      class="fa-solid fa-list-ul mr-1 w-4 text-center"></i> 藥品物品申請清單</a>
+  <a href="javascript:void(0)" id="dropdown-user-list-equip" onclick="switchView('user-list', 'equip')"
+    class="block px-4 py-3 text-[17px] text-slate-700 hover:bg-slate-100 hidden tracking-wide"><i
+      class="fa-solid fa-list-ul mr-1 w-4 text-center"></i> 設備申請清單</a>
+  <a href="javascript:void(0)" id="dropdown-logout"
+    onclick="document.getElementById('user-dropdown-menu').classList.add('hidden'); handleLogout();"
+    class="block px-4 py-3 text-[17px] text-slate-700 hover:bg-slate-100 tracking-wide"><i
+      class="fa-solid fa-sign-out-alt mr-1 w-4 text-center text-rose-600"></i> <span class="text-rose-600">登出</span></a>
+</div>

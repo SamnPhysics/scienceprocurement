@@ -1,0 +1,573 @@
+<script>
+  // ==========================================
+  // js-lab-modal.html — 實驗室預約模組：Modal 控制
+  // 職責：三個 Modal（新增預約/單日明細/週課表）、週導覽、列印、提交
+  // 使用優化A的 filterBookingsByRoomAndDate、優化D的 DocumentFragment
+  // 載入順序：依賴 js-lab-core.html、js-lab-render.html
+  // ==========================================
+
+  // Modal 狀態
+  let currentRoomScheduleRoomId = null;
+  let currentRoomScheduleBaseDate = null;
+
+  // ========== Modal 1: 新增預約表單 ==========
+
+  function openLabNewBookingModal() {
+    const now = new Date();
+    let h = now.getHours();
+    if (h < LAB_START_HOUR) h = LAB_START_HOUR;
+    if (h >= LAB_END_HOUR) h = LAB_END_HOUR - 1;
+    openLabModal('', `${String(h).padStart(2, '0')}:00`, `${String(h + 1).padStart(2, '0')}:00`, getLabLocalIsoDate(labCurrentDate));
+  }
+
+  function openLabModal(roomId = '', startTime = '', endTime = '', targetDate = '') {
+    const modal = document.getElementById('booking-modal');
+    const modalContent = document.getElementById('booking-modal-content');
+
+    // 1. 自動帶入點選的教室
+    const roomSelect = document.getElementById('modal-room-id');
+    if (roomSelect) {
+      roomSelect.value = String(roomId).trim();
+      if (!roomSelect.value || roomSelect.value === "") {
+        Array.from(roomSelect.options).forEach(opt => {
+          if (String(opt.value).trim() === String(roomId).trim() || opt.text.indexOf(String(roomId).trim()) !== -1) {
+            opt.selected = true;
+          }
+        });
+      }
+    }
+
+    // 2. 精確帶入點擊的日期
+    if (targetDate && targetDate.includes('-')) {
+      document.getElementById('modal-date').value = targetDate.trim();
+    } else {
+      document.getElementById('modal-date').value = getLabLocalIsoDate(labCurrentDate);
+    }
+
+    // 清空基本欄位
+    document.getElementById('modal-booking-title').value = '';
+    document.getElementById('modal-class').value = '';
+    document.getElementById('modal-capacity').value = '';
+    document.getElementById('modal-chemicals').value = '';
+    document.getElementById('modal-equipment').value = '';
+
+    // 根據登入帳號自動帶入姓名與控制文字框屬性
+    const teacherInput = document.getElementById('modal-teacher');
+    const studentInput = document.getElementById('modal-student');
+    const activeName = currentUserDisplayName || (currentUserEmail ? currentUserEmail.split('@')[0] : '');
+    const READONLY_CLASS = "w-full border border-gray-300 rounded-lg p-2 bg-gray-100 text-gray-600 cursor-not-allowed focus:outline-none";
+    const EDITABLE_CLASS = "w-full border border-gray-300 rounded-lg p-2 bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none";
+    const NOT_LOGIN_CLASS = "w-full border border-gray-300 rounded-lg p-2 bg-gray-100 text-gray-500 cursor-not-allowed focus:outline-none";
+
+    if (!currentUserEmail || currentUserEmail.trim() === '') {
+      // 尚未登入
+      if (teacherInput) { teacherInput.value = '尚未登入'; teacherInput.readOnly = true; teacherInput.className = NOT_LOGIN_CLASS; }
+      if (studentInput) { studentInput.value = '尚未登入'; studentInput.readOnly = true; studentInput.className = NOT_LOGIN_CLASS; }
+    } else if (isStudentAccount(currentUserEmail)) {
+      // 學生帳號：申請學生填自己，申請教師可輸入
+      if (studentInput) { studentInput.value = activeName; studentInput.readOnly = true; studentInput.className = READONLY_CLASS; }
+      if (teacherInput) { teacherInput.value = ''; teacherInput.readOnly = false; teacherInput.placeholder = "請輸入指導教師姓名"; teacherInput.className = EDITABLE_CLASS; }
+    } else {
+      // 教師帳號：申請教師填自己，申請學生可輸入
+      if (teacherInput) { teacherInput.value = activeName; teacherInput.readOnly = true; teacherInput.className = READONLY_CLASS; }
+      if (studentInput) { studentInput.value = '無'; studentInput.readOnly = false; studentInput.placeholder = "學生姓名(無則帶入「無」)"; studentInput.className = EDITABLE_CLASS; }
+    }
+
+    // 3. 根據起訖時間自動勾選節次
+    const checkboxes = document.querySelectorAll('#modal-periods input[type="checkbox"]');
+    checkboxes.forEach(cb => cb.checked = false);
+
+    // 排除全日點選 (08:00 至 18:00)，解決 08:00 不能勾選第一節的 bug
+    if (startTime && endTime && !(startTime === '08:00' && endTime === '18:00')) {
+      const toMins = (str) => { if (!str) return 0; const [h, m] = String(str).split(':').map(Number); return (h || 0) * 60 + (m || 0); };
+      const sMins = toMins(startTime);
+      const eMins = toMins(endTime);
+
+      let matched = false;
+      checkboxes.forEach(cb => {
+        const pStartMins = toMins(cb.getAttribute('data-start') || '');
+        const pEndMins = toMins(cb.getAttribute('data-end') || '');
+        const duration = pEndMins - pStartMins;
+        const overlap = Math.max(0, Math.min(eMins, pEndMins) - Math.max(sMins, pStartMins));
+
+        // 判斷條件：1. 該節次起始時間落於選定時段內 [sMins, eMins) (處理如 16:00 僅選第八節而非第七節)
+        //          2. 或是該節次有超過 50% 時間落於選定時段之內
+        if ((pStartMins >= sMins && pStartMins < eMins) || (duration > 0 && overlap > duration / 2)) {
+          cb.checked = true;
+          matched = true;
+        }
+      });
+
+      if (!matched && startTime) {
+        const startHourPrefix = String(startTime).split(':')[0];
+        checkboxes.forEach(cb => {
+          const pStart = cb.getAttribute('data-start') || '';
+          if (pStart && String(pStart).split(':')[0] === startHourPrefix) cb.checked = true;
+        });
+      }
+    }
+
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    setTimeout(() => {
+      modal.classList.remove('opacity-0');
+      modalContent.classList.remove('scale-95');
+      modalContent.classList.add('scale-100');
+    }, 10);
+  }
+
+  function closeLabModal() {
+    const modal = document.getElementById('booking-modal');
+    const modalContent = document.getElementById('booking-modal-content');
+    modal.classList.add('opacity-0');
+    modalContent.classList.remove('scale-100');
+    modalContent.classList.add('scale-95');
+    setTimeout(() => { modal.classList.add('hidden'); modal.classList.remove('flex'); }, 200);
+  }
+
+  // ========== Modal 2: 單日明細列表 ==========
+
+  function openLabWeekDetailsModal(roomId, dayName, targetDateIso) {
+    const room = labRooms.find(r => r.id === roomId) || { name: '該實驗室', id: roomId };
+
+    // 使用優化A的共用過濾函數
+    const dayBookings = filterBookingsByRoomAndDate(labBookings, room, targetDateIso);
+
+    document.getElementById('detail-modal-title').innerText = `${room.name} - ${dayName} (${targetDateIso})`;
+    document.getElementById('detail-modal-subtitle').innerText = `當日共有 ${dayBookings.length} 筆預約`;
+
+    const listContainer = document.getElementById('detail-modal-list');
+    listContainer.innerHTML = '';
+
+    if (dayBookings.length === 0) {
+      listContainer.innerHTML = renderTemplate('lab-day-no-bookings-template');
+    } else {
+      dayBookings.sort((a, b) => (a.start || '00:00').localeCompare(b.start || '00:00'));
+      // 優化D：用 DocumentFragment 批次建立明細卡片
+      const frag = document.createDocumentFragment();
+      dayBookings.forEach(b => {
+        const card = document.createElement('div');
+        card.className = `rounded-xl p-4 flex gap-4 items-center shadow-sm hover:shadow-md transition border border-gray-200/60 overflow-hidden ${getBookingColor(b)}`;
+        const periodsBadgeHtml = b.periodsList ? renderTemplate('lab-day-periods-badge-template', { periodsList: b.periodsList }) : '';
+        card.innerHTML = renderTemplate('lab-day-booking-card-template', {
+          title: b.title || '',
+          start: b.start || '',
+          end: b.end || '',
+          user: maskName(b.user || '無'),
+          courseType: String(b.courseType || '').trim() || '無',
+          className: String(b.className || b.class || '').trim() || '無',
+          periodsBadge: periodsBadgeHtml,
+          chemicals: b.chemicals || '無',
+          equipment: b.equipment || '無'
+        });
+        frag.appendChild(card);
+      });
+      listContainer.appendChild(frag);
+    }
+
+    const modal = document.getElementById('week-details-modal');
+    const content = document.getElementById('week-details-modal-content');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    setTimeout(() => { modal.classList.remove('opacity-0'); content.classList.remove('scale-95'); content.classList.add('scale-100'); }, 10);
+  }
+
+  function closeLabWeekDetailsModal() {
+    const modal = document.getElementById('week-details-modal');
+    const content = document.getElementById('week-details-modal-content');
+    modal.classList.add('opacity-0');
+    content.classList.remove('scale-100');
+    content.classList.add('scale-95');
+    setTimeout(() => { modal.classList.add('hidden'); modal.classList.remove('flex'); }, 200);
+  }
+
+  // ========== Modal 3: 單一教室週課表 + 週導覽 + 列印 ==========
+
+  function openLabRoomScheduleModal(roomId) {
+    currentRoomScheduleRoomId = roomId;
+    currentRoomScheduleBaseDate = new Date(labCurrentDate);
+    renderLabRoomScheduleContent();
+
+    const modal = document.getElementById('room-week-schedule-modal');
+    const content = document.getElementById('room-week-schedule-modal-content');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    setTimeout(() => { modal.classList.remove('opacity-0'); content.classList.remove('scale-95'); content.classList.add('scale-100'); }, 10);
+  }
+
+  function closeLabRoomScheduleModal() {
+    const modal = document.getElementById('room-week-schedule-modal');
+    const content = document.getElementById('room-week-schedule-modal-content');
+    modal.classList.add('opacity-0');
+    content.classList.remove('scale-100');
+    content.classList.add('scale-95');
+    setTimeout(() => { modal.classList.add('hidden'); modal.classList.remove('flex'); }, 200);
+  }
+
+  // 週導覽：前一週/本週/下一週
+  function changeRoomScheduleWeek(offset) {
+    if (!currentRoomScheduleRoomId) return;
+    if (!currentRoomScheduleBaseDate) currentRoomScheduleBaseDate = new Date(labCurrentDate);
+    if (offset === 0) {
+      currentRoomScheduleBaseDate = new Date();
+    } else {
+      currentRoomScheduleBaseDate.setDate(currentRoomScheduleBaseDate.getDate() + (offset * 7));
+    }
+    renderLabRoomScheduleContent();
+  }
+
+  // 小月表日曆直接跳轉
+  function jumpToRoomScheduleDate(dateStr) {
+    if (!currentRoomScheduleRoomId || !dateStr) return;
+    const parts = String(dateStr).trim().split('-');
+    if (parts.length === 3) {
+      currentRoomScheduleBaseDate = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+      renderLabRoomScheduleContent();
+    }
+  }
+
+  function renderLabRoomScheduleContent() {
+    if (!currentRoomScheduleRoomId) return;
+    const room = labRooms.find(r => r.id === currentRoomScheduleRoomId) || { name: '該實驗室', id: currentRoomScheduleRoomId };
+    const days = ['週一', '週二', '週三', '週四', '週五'];
+    const dayNames = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
+
+    const targetDate = currentRoomScheduleBaseDate ? new Date(currentRoomScheduleBaseDate) : new Date();
+    let dayOfWeek = targetDate.getDay();
+    if (dayOfWeek === 0) dayOfWeek = 7;
+    const monday = new Date(targetDate);
+    monday.setDate(targetDate.getDate() - (dayOfWeek - 1));
+    const friday = new Date(monday);
+    friday.setDate(monday.getDate() + 4);
+
+    document.getElementById('room-schedule-title').innerText = `${room.name} - 本週課表`;
+    const subtitleEl = document.getElementById('room-schedule-dates') || document.querySelector('#room-week-schedule-modal-content p.text-sm');
+    if (subtitleEl) subtitleEl.innerText = `${getLabLocalIsoDate(monday)} 至 ${getLabLocalIsoDate(friday)}`;
+    const datePickerEl = document.getElementById('room-schedule-date-picker');
+    if (datePickerEl) datePickerEl.value = getLabLocalIsoDate(monday).trim();
+
+    const HOUR_HEIGHT_PX = 60;
+    const todayIso = getLabLocalIsoDate(new Date()).trim();
+
+    // 1. 動態生成標頭（優化D）
+    const headerRow = document.getElementById('room-schedule-header');
+    const headerFrag = document.createDocumentFragment();
+    const cornerDiv = document.createElement('div');
+    cornerDiv.className = 'w-16 shrink-0 bg-white border-r border-gray-200';
+    headerFrag.appendChild(cornerDiv);
+
+    let weekDatesIso = [];
+    for (let i = 0; i < 5; i++) {
+      let d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      let dIso = getLabLocalIsoDate(d).trim();
+      weekDatesIso.push(dIso);
+      let isToday = (dIso === todayIso);
+      const headerCell = document.createElement('div');
+      headerCell.className = `flex-1 text-center py-3 border-r border-gray-200 ${isToday ? 'bg-indigo-50' : 'bg-white'}`;
+      headerCell.innerHTML = renderTemplate('lab-room-schedule-header-cell-template', {
+        textClass: isToday ? 'text-indigo-600' : 'text-gray-700',
+        dayName: days[i],
+        month: d.getMonth() + 1,
+        date: d.getDate()
+      });
+      headerFrag.appendChild(headerCell);
+    }
+    headerRow.innerHTML = '';
+    headerRow.appendChild(headerFrag);
+
+    // 2. 生成課表主體（優化D）
+    const bodyGrid = document.getElementById('room-schedule-body');
+    bodyGrid.innerHTML = '';
+
+    const timeCol = document.createElement('div');
+    timeCol.className = 'w-16 shrink-0 border-r border-gray-200 flex flex-col bg-white relative';
+    const timeFrag = document.createDocumentFragment();
+    for (let i = LAB_START_HOUR; i < LAB_END_HOUR; i++) {
+      const timeSlot = document.createElement('div');
+      timeSlot.className = 'border-b border-gray-100 flex items-start justify-end pr-2 pt-1 text-xs text-gray-400 font-medium';
+      timeSlot.style.height = `${HOUR_HEIGHT_PX}px`;
+      timeSlot.textContent = `${String(i).padStart(2, '0')}:00`;
+      timeFrag.appendChild(timeSlot);
+    }
+    timeCol.appendChild(timeFrag);
+    bodyGrid.appendChild(timeCol);
+
+    days.forEach((day, index) => {
+      const dayCol = document.createElement('div');
+      const colIso = weekDatesIso[index];
+      const isToday = (colIso === todayIso);
+
+      dayCol.className = `flex-1 border-r border-gray-200 relative min-w-[120px] ${isToday ? 'bg-indigo-50/20' : 'bg-white'}`;
+
+      // 時段格子（優化D）：改為各時段獨立偵測與發動預約，比照日檢視表效果
+      const slotFrag = document.createDocumentFragment();
+      for (let i = LAB_START_HOUR; i < LAB_END_HOUR; i++) {
+        const startT = `${String(i).padStart(2, '0')}:00`;
+        const endT = `${String(i + 1).padStart(2, '0')}:00`;
+        const slot = document.createElement('div');
+        slot.className = 'w-full border-b border-gray-100 hover:bg-indigo-50/60 transition duration-150 flex items-center justify-center group/cell cursor-pointer relative';
+        slot.style.height = `${HOUR_HEIGHT_PX}px`;
+        slot.innerHTML = renderTemplate('lab-room-schedule-hover-template', { startTime: startT });
+        slot.onclick = (e) => {
+          if (e.target.closest('.booking-block')) return;
+          closeLabRoomScheduleModal();
+          setTimeout(() => {
+            openLabModal(currentRoomScheduleRoomId, startT, endT, colIso);
+          }, 200);
+        };
+        slotFrag.appendChild(slot);
+      }
+      dayCol.appendChild(slotFrag);
+
+      // 使用優化A的共用過濾函數
+      const dayBookings = filterBookingsByRoomAndDate(labBookings, room, colIso);
+
+      dayBookings.forEach(b => {
+        const [startH, startM] = (b.start || '08:00').split(':').map(Number);
+        const [endH, endM] = (b.end || '09:00').split(':').map(Number);
+        const topPx = (startH - LAB_START_HOUR + startM / 60) * HOUR_HEIGHT_PX;
+        const heightPx = ((endH - startH) + (endM - startM) / 60) * HOUR_HEIGHT_PX;
+
+        const block = document.createElement('div');
+        block.className = `booking-block absolute left-1 right-1 rounded-md shadow-sm p-1.5 overflow-hidden flex flex-col opacity-90 hover:opacity-100 hover:shadow-md transition cursor-pointer hover:z-20 ${getBookingColor(b)}`;
+        block.style.top = `${topPx + 2}px`;
+        block.style.height = `${heightPx - 4}px`;
+
+        const isVeryShort = heightPx <= 35;
+        if (isVeryShort) {
+          block.innerHTML = renderTemplate('lab-room-schedule-block-short-template', { start: b.start || '', title: b.title || '' });
+        } else {
+          const userBadgeHtml = heightPx > 60 ? renderTemplate('lab-room-schedule-user-badge-template', {
+            user: maskName(b.user || '無'),
+            courseType: String(b.courseType || '').trim() || '無',
+            className: String(b.className || b.class || '').trim() || '無'
+          }) : '';
+          block.innerHTML = renderTemplate('lab-room-schedule-block-normal-template', {
+            start: b.start || '',
+            end: b.end || '',
+            title: b.title || '',
+            userBadge: userBadgeHtml
+          });
+        }
+
+        block.onclick = (e) => {
+          e.stopPropagation();
+          const detailMsg = `地點：${room.name}\n課程內容：${b.title}\n預約老師/對象：${maskName(b.user)}\n課程型態：${String(b.courseType || '').trim() || '無'}\n使用班級：${String(b.className || b.class || '').trim() || '無'}\n使用節次：${b.periodsList || '全日'}\n日期時間：${b.date} (${b.start} - ${b.end})\n實驗所需化學藥品：${b.chemicals || '無'}\n實驗所需器材：${b.equipment || '無'}`;
+          alert(detailMsg, "實驗室/教室 預約明細", { booking: b });
+        };
+
+        dayCol.appendChild(block);
+      });
+
+      bodyGrid.appendChild(dayCol);
+    });
+  }
+
+  // ========== 列印本頁功能 ==========
+
+  function printLabRoomSchedule() {
+    if (!currentRoomScheduleRoomId) return;
+    const room = labRooms.find(r => r.id === currentRoomScheduleRoomId) || { name: '自然科實驗室', id: currentRoomScheduleRoomId };
+    const days = ['週一', '週二', '週三', '週四', '週五'];
+
+    const baseDate = currentRoomScheduleBaseDate ? new Date(currentRoomScheduleBaseDate) : new Date(labCurrentDate);
+    let dayOfWeek = baseDate.getDay();
+    if (dayOfWeek === 0) dayOfWeek = 7;
+    const monday = new Date(baseDate);
+    monday.setDate(baseDate.getDate() - (dayOfWeek - 1));
+    const friday = new Date(monday);
+    friday.setDate(monday.getDate() + 4);
+
+    const monStr = getLabLocalIsoDate(monday).trim();
+    const friStr = getLabLocalIsoDate(friday).trim();
+
+    let weekDatesIso = [];
+    let headerCellsHtml = '';
+    for (let i = 0; i < 5; i++) {
+      let d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      let dIso = getLabLocalIsoDate(d).trim();
+      weekDatesIso.push(dIso);
+      headerCellsHtml += `<th style="border: 1px solid #000; padding: 8px 4px; width: 16.5%;">${days[i]}<br><span style="font-size: 11pt; font-weight: normal;">(${d.getMonth() + 1}/${d.getDate()})</span></th>`;
+    }
+
+    const numHours = LAB_END_HOUR - LAB_START_HOUR;
+    let columnsData = [];
+    for (let d = 0; d < 5; d++) {
+      let colGrid = new Array(numHours).fill(null);
+      const colIso = weekDatesIso[d];
+
+      // 使用優化A的共用過濾函數
+      const dayBookings = filterBookingsByRoomAndDate(labBookings, room, colIso);
+
+      dayBookings.forEach(b => {
+        const [startH, startM] = (b.start || '08:00').split(':').map(Number);
+        const [endH, endM] = (b.end || '09:00').split(':').map(Number);
+        let idx = startH - LAB_START_HOUR;
+        if (idx < 0) idx = 0;
+        if (idx >= numHours) idx = numHours - 1;
+        let endIdx = Math.ceil((endH * 60 + (endM || 0) - (LAB_START_HOUR * 60)) / 60);
+        if (endIdx <= idx) endIdx = idx + 1;
+        let span = endIdx - idx;
+        if (idx + span > numHours) span = numHours - idx;
+        if (!colGrid[idx]) { colGrid[idx] = { booking: [b], span: span }; }
+        else if (colGrid[idx] !== 'SKIP') { colGrid[idx].booking.push(b); if (span > colGrid[idx].span) colGrid[idx].span = span; }
+        const actualSpan = colGrid[idx] && colGrid[idx].span ? colGrid[idx].span : span;
+        for (let k = idx + 1; k < idx + actualSpan; k++) { if (k < numHours) colGrid[k] = 'SKIP'; }
+      });
+
+      columnsData.push(colGrid);
+    }
+
+    let tbodyRowsHtml = '';
+    for (let h = LAB_START_HOUR; h < LAB_END_HOUR; h++) {
+      let rIndex = h - LAB_START_HOUR;
+      let trHtml = `<tr><td style="border: 1px solid #000; padding: 6px 4px; text-align: center; font-weight: bold; background-color: #f8f8f8; font-size: 11pt;">${String(h).padStart(2, '0')}:00 - ${String(h + 1).padStart(2, '0')}:00</td>`;
+      for (let d = 0; d < 5; d++) {
+        let cellData = columnsData[d][rIndex];
+        if (cellData === 'SKIP') continue;
+        if (!cellData) {
+          trHtml += `<td style="border: 1px solid #000; padding: 4px;"></td>`;
+        } else {
+          let contentHtml = cellData.booking.map(b => `
+            <div style="margin: 2px 0;">
+              <div style="font-size: 10pt; color: #333; font-weight: bold;">[${b.start} - ${b.end}]</div>
+              <div style="font-size: 11.5pt; color: #111; font-weight: bold; margin-top: 2px;">${b.title}</div>
+              <div style="font-size: 10pt; color: #0056b3; margin-top: 2px;">申請：${maskName(b.user || '無')}</div>
+              ${(b.courseType && b.courseType !== '無') ? `<div style="font-size: 9.5pt; color: #444; margin-top: 1px;">型態：${b.courseType}</div>` : ''}
+              ${(b.className || b.class) ? `<div style="font-size: 9.5pt; color: #444; margin-top: 1px;">班級：${b.className || b.class}</div>` : ''}
+              ${b.periodsList ? `<div style="font-size: 9pt; color: #666; margin-top: 1px;">(${b.periodsList})</div>` : ''}
+            </div>
+          `).join('<hr style="border: 0; border-top: 1px dashed #888; margin: 6px 0;">');
+          trHtml += `<td rowspan="${cellData.span}" style="border: 1px solid #000; background-color: #fbfbfd; padding: 6px; vertical-align: top; text-align: left;">${contentHtml}</td>`;
+        }
+      }
+      trHtml += `</tr>`;
+      tbodyRowsHtml += trHtml;
+    }
+
+    const nowStr = new Date().toLocaleString('zh-TW');
+    const templateEl = document.getElementById('lab-schedule-print-template');
+    if (!templateEl) { alert('找不到列印樣板 (lab-schedule-print-template)，請確認模組是否有成功載入。'); return; }
+
+    let htmlContent = templateEl.innerHTML
+      .replace(/{{roomName}}/g, room.name)
+      .replace(/{{monStr}}/g, monStr)
+      .replace(/{{friStr}}/g, friStr)
+      .replace(/{{headerCellsHtml}}/g, headerCellsHtml)
+      .replace(/{{tbodyRowsHtml}}/g, tbodyRowsHtml)
+      .replace(/{{nowStr}}/g, nowStr);
+
+    const printWin = window.open('', '_blank', 'width=900,height=750,scrollbars=yes');
+    if (printWin) { printWin.document.open(); printWin.document.write(htmlContent); printWin.document.close(); }
+    else alert('無法開啟列印視窗，請檢查您的瀏覽器是否阻擋了彈出式視窗。');
+  }
+
+  // ========== 預約提交 ==========
+
+  function submitLabBookingForm() {
+    const emailVal = (currentUserEmail || '').toLowerCase();
+    if (!emailVal || !emailVal.endsWith('@' + allowedDomain)) {
+      alert('請先登入 @' + allowedDomain + ' 帳號後再送出預約。');
+      return;
+    }
+
+    const roomId = document.getElementById('modal-room-id').value;
+    const date = document.getElementById('modal-date').value;
+    const title = document.getElementById('modal-booking-title').value.trim();
+    const className = document.getElementById('modal-class').value.trim();
+    const teacher = document.getElementById('modal-teacher').value.trim();
+    const student = document.getElementById('modal-student').value.trim() || '無';
+    const type = document.getElementById('modal-type').value;
+    const capacity = document.getElementById('modal-capacity').value;
+    const chemicals = document.getElementById('modal-chemicals').value.trim();
+    const equipment = document.getElementById('modal-equipment').value.trim();
+
+    const checkboxes = document.querySelectorAll('#modal-periods input[type="checkbox"]:checked');
+    const periods = Array.from(checkboxes).map(cb => cb.value).join(',');
+
+    if (!roomId || !date || !title || !periods) {
+      alert('請填寫必填欄位 (實驗室、日期、節次、課程內容)！');
+      return;
+    }
+
+    const isRecurring = document.getElementById('modal-is-recurring') ? document.getElementById('modal-is-recurring').checked : false;
+    const endDate = document.getElementById('modal-end-date') ? document.getElementById('modal-end-date').value : '';
+
+    if (isRecurring) {
+      if (!endDate) {
+        alert('請選擇週期性預約的結束日期！');
+        return;
+      }
+      if (new Date(endDate) < new Date(date)) {
+        alert('結束日期不能早於使用日期！');
+        return;
+      }
+    }
+
+    const newBooking = {
+      email: emailVal,
+      '使用班級': className, '申請教師': teacher, '申請學生': student,
+      '使用日期': date, '使用節次': periods, '使用實驗室': roomId,
+      '實驗名稱/課程內容': title, '實驗所需化學藥品': chemicals,
+      '實驗所需器材': equipment, '使用型態': type, '人數': capacity,
+      isRecurring: isRecurring, endDate: endDate
+    };
+
+    if (typeof google !== 'undefined' && google.script) {
+      const btn = document.getElementById('lab_submitBtn');
+      const oldText = btn ? btn.innerText : '';
+      if (btn) { btn.innerText = '處理中...'; btn.disabled = true; }
+
+      google.script.run
+        .withSuccessHandler(function (res) {
+          if (res && res.conflicts && res.conflicts.length > 0) {
+            const conflictMsgs = res.conflicts.map(c => c.date + ' ' + c.period).join('\n');
+            alert("預約已處理！\n\n注意：以下時段因衝堂已被跳過未預約：\n" + conflictMsgs);
+          } else {
+            alert("預約成功！");
+          }
+          if (window.SystemCache) window.SystemCache.invalidate('labData');
+          fetchLabBackendData();
+          closeLabModal();
+          if (btn) { btn.innerText = oldText; btn.disabled = false; }
+        })
+        .withFailureHandler(function (error) {
+          alert("預約失敗: " + error);
+          if (btn) { btn.innerText = oldText; btn.disabled = false; }
+        })
+        .submitLabBooking(newBooking, getToken());
+    } else {
+      alert("已收集表單資料 (本地測試):\n" + JSON.stringify(newBooking, null, 2));
+      closeLabModal();
+    }
+  }
+
+  // 全域 Esc 鍵監聽，順序關閉目前開啟的實驗室模組視窗
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape' || event.keyCode === 27) {
+      const bookingModal = document.getElementById('booking-modal');
+      const weekDetailsModal = document.getElementById('week-details-modal');
+      const roomScheduleModal = document.getElementById('room-week-schedule-modal');
+
+      if (bookingModal && !bookingModal.classList.contains('hidden')) {
+        closeLabModal();
+      } else if (weekDetailsModal && !weekDetailsModal.classList.contains('hidden')) {
+        closeLabWeekDetailsModal();
+      } else if (roomScheduleModal && !roomScheduleModal.classList.contains('hidden')) {
+        closeLabRoomScheduleModal();
+      }
+    }
+  });
+
+  // ========== 頁面初始化 ==========
+  document.addEventListener('DOMContentLoaded', () => {
+    if (document.getElementById('rooms-container')) {
+      updateLabDateDisplay(labCurrentView);
+      renderLabTimeHeader();
+      fetchLabBackendData();
+      setInterval(updateLabCurrentTimeLine, 60000);
+    }
+  });
+</script>

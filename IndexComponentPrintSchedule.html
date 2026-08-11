@@ -1,0 +1,90 @@
+<!-- 實驗室週課表 A4 列印專用 HTML 樣板 (以 text/template 獨立存放，避免佔用 JS 檔案篇幅) -->
+<script id="lab-schedule-print-template" type="text/template">
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>國立鳳新高級中學 - {{roomName}} 課程表</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 15mm 12mm;
+    }
+    body {
+      font-family: 'Microsoft JhengHei', 'Helvetica Neue', Arial, sans-serif;
+      color: #000;
+      margin: 0;
+      padding: 0;
+      line-height: 1.35;
+    }
+    .header-container {
+      text-align: center;
+      margin-bottom: 10px;
+    }
+    .title-main {
+      font-size: 22pt;
+      font-weight: 800;
+      margin: 0 0 6px 0;
+      letter-spacing: 3px;
+    }
+    .title-sub {
+      font-size: 17pt;
+      font-weight: 700;
+      margin: 0 0 6px 0;
+      letter-spacing: 1px;
+    }
+    .date-range {
+      text-align: right;
+      font-size: 11pt;
+      color: #333;
+      margin-bottom: 6px;
+      font-weight: 600;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      border: 2px solid #000;
+      table-layout: fixed;
+    }
+    th {
+      background-color: #ebebee;
+      font-weight: bold;
+    }
+    .footer-container {
+      margin-top: 10px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 10pt;
+      color: #444;
+    }
+    @media print {
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body onload="setTimeout(function() { window.print(); }, 300);">
+  <div class="header-container">
+    <h1 class="title-main">國立鳳新高級中學</h1>
+    <h2 class="title-sub">{{roomName}} 課程表</h2>
+  </div>
+  <div class="date-range">
+    <span>課表週次：{{monStr}} 至 {{friStr}}</span>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th style="border: 1px solid #000; padding: 8px 4px; width: 85px;">時間</th>
+        {{headerCellsHtml}}
+      </tr>
+    </thead>
+    <tbody>
+      {{tbodyRowsHtml}}
+    </tbody>
+  </table>
+  <div class="footer-container">
+    <span>列印時間：{{nowStr}}</span>
+    <span>自然科教學與實驗設備預約管理系統</span>
+  </div>
+</body>
+</html>
+</script>

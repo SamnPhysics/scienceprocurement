@@ -1,0 +1,451 @@
+<div id="view-apply-lab" class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 hidden">
+  <h2 class="text-xl font-bold text-slate-900 mb-6 border-b pb-3">實驗室借用/使用 申請表單</h2>
+  <details
+    class="mb-6 bg-blue-50 border border-blue-200 text-blue-800 p-4 rounded-lg text-sm leading-relaxed shadow-sm group cursor-pointer">
+    <summary class="font-bold text-base text-blue-900 list-none flex justify-between items-center focus:outline-none">
+      <span>
+        供教師或學生提出實驗室使用登記，確保實驗安全與釐清使用責任。
+      </span>
+      <span class="transition-transform duration-200 group-open:rotate-180 flex-shrink-0 ml-2">
+        <svg class="h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+        </svg>
+      </span>
+    </summary>
+    <div class="mt-3 border-t border-blue-200 pt-3">
+      <ol class="list-decimal list-inside space-y-1.5 ml-1 text-blue-800">
+        <li>預約時須詳列化學藥品（含濃度）、生物製劑及高功率/危險儀器。</li>
+        <li>實驗完畢後，玻璃器具洗淨歸位；精密儀器用專用拭鏡紙擦拭；木塑膠屑等加工殘渣清掃乾淨，作品模型勿占用公用桌面。</li>
+        <li>實驗廢液與固體廢棄物，嚴禁直接倒入水槽或一般垃圾桶，請務必依實驗室規定分類回收。</li>
+        <li>離開前請確認關閉水電及門窗。</li>
+        <li>借用人/指導老師需確認場地復原完畢始可離開。若經查現有未清理、器材毀損或廢液傾倒不當之情事，將暫停或取消該單位/個人次學期之借用資格，並需照價賠償。</li>
+      </ol>
+    </div>
+  </details>
+
+  <!-- 注入的樣式 -->
+  <style>
+    body {
+      font-family: 'Noto Sans TC', sans-serif;
+      background-color: #f3f4f6;
+    }
+
+    /* 隱藏捲軸但保持可捲動功能 */
+    #view-apply-lab .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+
+    #view-apply-lab .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    /* 時間軸背景網格線 (改為由 DOM 實體格線負責，除卻 CSS gradient 產生之累積偏差) */
+    #view-apply-lab .timeline-grid {
+      background-color: transparent;
+    }
+
+    /* 預約區塊的懸停動畫 */
+    #view-apply-lab .booking-block {
+      transition: transform 0.1s ease, box-shadow 0.1s ease;
+    }
+
+    #view-apply-lab .booking-block:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+      z-index: 10;
+    }
+
+    /* 空白時段懸停效果 (日檢視) */
+    #view-apply-lab .empty-slot-hover {
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+
+    #view-apply-lab .timeline-row:hover .empty-slot-hover {
+      opacity: 1;
+    }
+
+    /* 週表樣式 (週檢視) */
+    #view-apply-lab .week-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      /* 顯示週一到週五 */
+      gap: 1px;
+      background-color: #e5e7eb;
+      /* 網格線顏色 */
+    }
+
+    #view-apply-lab .week-cell {
+      background-color: white;
+      position: relative;
+      padding: 0.5rem;
+      min-height: 90px;
+    }
+
+    #view-apply-lab .week-cell:hover {
+      background-color: #f9fafb;
+    }
+  </style>
+
+  <!-- 預約系統主介面 -->
+  <div class="flex flex-col h-[800px] mt-4 border border-gray-200 rounded-xl overflow-hidden">
+
+
+
+    <!-- 新增：頂端操作列 -->
+    <div
+      class="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center shrink-0 z-20 shadow-sm rounded-t-xl">
+
+
+      <div class="flex items-center gap-6">
+        <!-- 視圖切換器 (日/週) -->
+        <div class="bg-gray-100 p-1 rounded-lg flex items-center text-sm font-medium">
+          <button id="btn-day-view" onclick="switchLabView('day')"
+            class="px-4 py-1.5 rounded-md bg-white text-indigo-600 shadow-sm transition">日檢視</button>
+          <button id="btn-week-view" onclick="switchLabView('week')"
+            class="px-4 py-1.5 rounded-md text-gray-500 hover:text-gray-800 transition">週檢視</button>
+        </div>
+
+        <!-- 日期切換器 -->
+        <div class="flex items-center bg-gray-100 rounded-lg p-1">
+          <button onclick="changeLabDate(-1)"
+            class="px-3 py-1 text-gray-500 hover:text-gray-800 hover:bg-white rounded-md transition"><i
+              class="fa-solid fa-chevron-left"></i></button>
+          <div class="px-4 font-medium text-gray-700 flex items-center gap-2">
+            <i class="fa-regular fa-calendar"></i>
+            <span id="current-date-display">2026年7月10日 (週五)</span>
+          </div>
+          <button onclick="changeLabDate(1)"
+            class="px-3 py-1 text-gray-500 hover:text-gray-800 hover:bg-white rounded-md transition"><i
+              class="fa-solid fa-chevron-right"></i></button>
+        </div>
+
+        <button onclick="openLabNewBookingModal()"
+          class="bg-indigo-50 text-indigo-700 px-4 py-2 rounded-lg font-medium hover:bg-indigo-100 transition flex items-center gap-2">
+          新增預約
+        </button>
+      </div>
+    </div>
+
+    <!-- 篩選與工具列 -->
+    <div class="bg-white rounded-xl shadow-sm p-4 flex justify-between items-center shrink-0">
+      <div class="flex gap-4">
+        <div class="relative">
+          <i class="fa-solid fa-building absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+          <select id="lab-building-select" onchange="renderLabContent()"
+            class="pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-medium text-gray-700 cursor-pointer">
+            <option value="">所有大樓 / 區域</option>
+          </select>
+        </div>
+        <div class="relative w-[120px]">
+          <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+          <input type="text" id="lab-search-input" placeholder="搜尋名稱..." oninput="renderLabContent()"
+            class="pl-9 pr-2 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-medium text-gray-700 w-full transition duration-150">
+        </div>
+
+      </div>
+
+      <div class="flex items-center gap-4 text-sm">
+        <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-indigo-500"></span> 已預約</div>
+        <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-emerald-500"></span> 您的預約</div>
+        <div class="flex items-center gap-2"><span
+            class="w-3 h-3 rounded-full bg-gray-200 border border-gray-300"></span> 空閒可借</div>
+        <div class="flex items-center gap-2" id="current-time-legend"><span
+            class="w-3 h-3 rounded-full bg-red-400"></span> 目前時間</div>
+      </div>
+    </div>
+
+    <!-- 時間軸網格視圖容器 -->
+    <div class="flex-1 bg-white rounded-xl shadow-sm overflow-hidden flex flex-col relative border border-gray-200">
+
+      <!-- X軸標頭 -->
+      <div class="flex border-b border-gray-200 bg-gray-50 shrink-0">
+        <!-- 左上角空白處 -->
+        <div class="w-44 shrink-0 border-r border-gray-200 p-4 flex items-center text-sm font-bold text-gray-500">
+          空間 / 教室列表
+        </div>
+        <!-- 日表時間軸標頭 -->
+        <div class="flex-1 relative flex text-xs font-medium text-gray-500 transition-opacity duration-300"
+          id="time-header">
+          <!-- 透過 JS 動態生成 08:00 ~ 18:00 -->
+        </div>
+        <!-- 週表日期標頭 (預設隱藏) -->
+        <div
+          class="flex-1 relative hidden grid-cols-5 text-xs font-medium text-gray-500 transition-opacity duration-300"
+          id="week-header">
+          <!-- 由 JS 動態生成當週真實日期 (週一至週五) -->
+        </div>
+      </div>
+
+      <!-- Y軸教室與內部時間網格 (可捲動區域) -->
+      <div class="flex-1 overflow-y-auto relative no-scrollbar" id="timeline-body">
+        <!-- 內部包裝容器：確保目前時間紅線能隨著教室資料的高低自動調整完整長度 -->
+        <div class="relative min-h-full flex flex-col">
+          <!-- 現在時間指示線 (紅色垂直線，僅日檢視顯示) -->
+          <div id="current-time-line" class="absolute top-0 bottom-0 w-px bg-red-500 z-10 pointer-events-none hidden"
+            style="left: calc(176px + (100% - 176px) * 0.366);">
+            <div class="absolute -top-1 -translate-x-1/2 w-3 h-3 rounded-full bg-red-500"></div>
+          </div>
+
+          <!-- 教室資料列 (透過 JS 動態生成) -->
+          <div id="rooms-container" class="flex flex-col flex-1">
+            <!-- 內容由 JS 填充 -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 注入的 Modals -->
+  <!-- 預約彈窗 (Modal) -->
+  <div id="booking-modal" onclick="if(event.target === this) closeLabModal()"
+    class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 opacity-0 transition-opacity duration-200">
+    <div
+      class="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md transform scale-95 transition-transform duration-200 overflow-hidden flex flex-col max-h-[85vh]"
+      id="booking-modal-content">
+      <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center shrink-0">
+        <h2 class="text-xl font-bold text-slate-900">新增預約</h2>
+        <button type="button" onclick="closeLabModal()"
+          class="w-8 h-8 flex items-center justify-center rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
+          <i class="fa-solid fa-xmark text-xl"></i>
+        </button>
+      </div>
+      <div class="p-6 space-y-4 overflow-y-auto no-scrollbar flex-1">
+        <!-- 申請教師與申請學生 (改放於彈窗第一行) -->
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">申請教師</label>
+            <input type="text" id="modal-teacher" placeholder="教師姓名"
+              class="w-full border border-slate-300 rounded-lg p-2 text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">申請學生</label>
+            <input type="text" id="modal-student" placeholder="學生姓名(無則免填)"
+              class="w-full border border-slate-300 rounded-lg p-2 text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+          </div>
+        </div>
+
+        <!-- 基本資訊 -->
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">使用日期</label>
+            <input type="date" id="modal-date"
+              class="w-full border border-slate-300 rounded-lg p-2 text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">使用實驗室</label>
+            <select id="modal-room-id"
+              class="w-full border border-slate-300 rounded-lg p-2 text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+              <option value="">請選擇...</option>
+              <option value="201">物理實驗室 (201)</option>
+              <option value="202">化學實驗室 (202)</option>
+              <option value="203">生物實驗室 (203)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- 節次選擇與週期性設定 -->
+        <div>
+          <div class="flex items-center gap-4 mb-2">
+            <label class="block text-sm font-medium text-slate-700">使用節次 (可多選)</label>
+            <div class="flex items-center gap-2">
+              <label
+                class="relative flex items-center gap-1.5 cursor-pointer px-2 py-1 rounded border transition-colors has-[:checked]:bg-indigo-50 has-[:checked]:border-indigo-200 has-[:checked]:text-indigo-700 border-slate-300 bg-white text-slate-600 hover:bg-slate-50">
+                <input type="checkbox" id="modal-is-recurring"
+                  onchange="document.getElementById('modal-end-date-container').classList.toggle('hidden', !this.checked)"
+                  class="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer border-slate-400">
+                <span class="text-sm font-medium">週期性預約</span>
+              </label>
+              <div id="modal-end-date-container" class="hidden flex items-center gap-2 ml-1">
+                <span class="text-sm font-medium text-slate-600">至</span>
+                <input type="date" id="modal-end-date"
+                  class="border border-slate-300 rounded p-1 text-sm text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none h-[30px]">
+              </div>
+            </div>
+          </div>
+          <div class="grid grid-cols-4 gap-2" id="modal-periods">
+            <!-- 節次資料 -->
+            <label class="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" value="第1節"
+                class="rounded text-indigo-600 focus:ring-indigo-500"> 第1節</label>
+            <label class="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" value="第2節"
+                class="rounded text-indigo-600 focus:ring-indigo-500"> 第2節</label>
+            <label class="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" value="第3節"
+                class="rounded text-indigo-600 focus:ring-indigo-500"> 第3節</label>
+            <label class="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" value="第4節"
+                class="rounded text-indigo-600 focus:ring-indigo-500"> 第4節</label>
+            <label class="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" value="第5節"
+                class="rounded text-indigo-600 focus:ring-indigo-500"> 第5節</label>
+            <label class="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" value="第6節"
+                class="rounded text-indigo-600 focus:ring-indigo-500"> 第6節</label>
+            <label class="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" value="第7節"
+                class="rounded text-indigo-600 focus:ring-indigo-500"> 第7節</label>
+            <label class="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" value="第8節"
+                class="rounded text-indigo-600 focus:ring-indigo-500"> 第8節</label>
+          </div>
+        </div>
+
+        <!-- 班級、上課人數與使用型態 -->
+        <div class="grid grid-cols-3 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">使用班級</label>
+            <input type="text" id="modal-class" placeholder="例: 313"
+              class="w-full border border-slate-300 rounded-lg p-2 text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">上課人數</label>
+            <input type="number" id="modal-capacity" placeholder="人數"
+              class="w-full border border-slate-300 rounded-lg p-2 text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">課程類型</label>
+            <select id="modal-type"
+              class="w-full border border-slate-300 rounded-lg p-2 text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+              <option value="">請選擇</option>
+              <option value="課綱實驗">課綱實驗</option>
+              <option value="校定必修">校定必修</option>
+              <option value="探究實作">探究實作</option>
+              <option value="多元選修">多元選修</option>
+              <option value="彈性課程">彈性課程</option>
+              <option value="社團課程">社團課程</option>
+              <option value="能力競賽培訓">能力競賽培訓</option>
+              <option value="科展培訓">科展培訓</option>
+              <option value="其他">其他</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- 課程/實驗內容 (放寬與彈窗同寬) -->
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">實驗名稱/課程內容</label>
+          <input type="text" id="modal-booking-title" placeholder="請輸入課程內容"
+            class="w-full border border-slate-300 rounded-lg p-2 text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+        </div>
+
+        <!-- 藥品與器材 -->
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">實驗所需化學藥品 (含濃度)</label>
+          <textarea id="modal-chemicals" rows="2"
+            class="w-full border border-slate-300 rounded-lg p-2 text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+            placeholder="請詳列藥品...，若不使用，請填無即可"></textarea>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">實驗所需器材 / 高功率儀器</label>
+          <textarea id="modal-equipment" rows="2"
+            class="w-full border border-slate-300 rounded-lg p-2 text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+            placeholder="請詳列器材..."></textarea>
+        </div>
+
+      </div>
+      <div class="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-end items-center gap-3 shrink-0">
+        <button type="button" onclick="closeLabModal()"
+          class="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 rounded-lg text-sm font-semibold transition border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-300">取消</button>
+        <button id="lab_submitBtn" type="button" onclick="submitLabBookingForm()"
+          class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold transition shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"><span>確認預約</span></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 週檢視：單日行程明細彈窗 -->
+  <div id="week-details-modal" onclick="if(event.target === this) closeLabWeekDetailsModal()"
+    class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 opacity-0 transition-opacity duration-200">
+    <div
+      class="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md transform scale-95 transition-transform duration-200 overflow-hidden flex flex-col max-h-[80vh]"
+      id="week-details-modal-content">
+      <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center shrink-0">
+        <div>
+          <h2 class="text-xl font-bold text-slate-900" id="detail-modal-title">教室名稱 - 週X 行程</h2>
+          <p class="text-sm text-slate-500 mt-1" id="detail-modal-subtitle">共 X 筆預約</p>
+        </div>
+        <button type="button" onclick="closeLabWeekDetailsModal()"
+          class="w-8 h-8 flex items-center justify-center rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
+          <i class="fa-solid fa-xmark text-xl"></i>
+        </button>
+      </div>
+      <!-- 行程列表區 -->
+      <div class="p-6 overflow-y-auto flex-1 space-y-3 bg-slate-50/50" id="detail-modal-list">
+        <!-- 內容由 JS 動態生成 -->
+      </div>
+      <div class="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-end items-center gap-3 shrink-0">
+        <button type="button" onclick="closeLabWeekDetailsModal()"
+          class="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 rounded-lg text-sm font-semibold transition border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-300">關閉</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 新增：單一教室「本週課表」彈窗 (縱軸時間、橫軸日期) -->
+  <div id="room-week-schedule-modal" onclick="if(event.target === this) closeLabRoomScheduleModal()"
+    class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 opacity-0 transition-opacity duration-200">
+    <div
+      class="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-5xl transform scale-95 transition-transform duration-200 overflow-hidden flex flex-col h-[85vh] m-4"
+      id="room-week-schedule-modal-content">
+      <!-- 標頭 -->
+      <div
+        class="px-6 py-4 border-b border-slate-100 flex flex-wrap gap-3 justify-between items-center shrink-0 bg-slate-50/50 z-20">
+        <div class="flex items-center gap-3">
+          <div
+            class="bg-indigo-100 text-indigo-600 w-10 h-10 rounded-lg flex items-center justify-center text-lg shadow-sm">
+            <i class="fa-solid fa-chalkboard-user"></i>
+          </div>
+          <div>
+            <h2 class="text-xl font-bold text-slate-900" id="room-schedule-title">教室名稱 - 本週預約表</h2>
+            <p class="text-sm text-slate-500 mt-0.5" id="room-schedule-dates">2026/07/06 - 2026/07/10</p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2 sm:gap-3 flex-wrap">
+          <!-- 週導覽工具列暨小月表 -->
+          <div
+            class="inline-flex items-center rounded-lg shadow-sm border border-slate-200 bg-white divide-x divide-slate-200"
+            role="group">
+            <button type="button" onclick="changeRoomScheduleWeek(-1)" title="切換至前一週課表"
+              class="px-3 py-1.5 rounded-l-lg hover:bg-slate-50 text-slate-700 text-xs sm:text-sm font-medium flex items-center gap-1 transition shrink-0">
+              <i class="fa-solid fa-chevron-left text-xs"></i> 前一週
+            </button>
+            <button type="button" onclick="changeRoomScheduleWeek(0)" title="傳回本週課表"
+              class="px-3 py-1.5 hover:bg-slate-50 text-indigo-600 text-xs sm:text-sm font-bold transition shrink-0">
+              本週
+            </button>
+            <button type="button" onclick="changeRoomScheduleWeek(1)" title="切換至下一週課表"
+              class="px-3 py-1.5 hover:bg-slate-50 text-slate-700 text-xs sm:text-sm font-medium flex items-center gap-1 transition shrink-0">
+              下一週 <i class="fa-solid fa-chevron-right text-xs"></i>
+            </button>
+            <div class="relative flex items-center px-2.5 py-1 hover:bg-slate-50 rounded-r-lg transition shrink-0"
+              title="點選展開小月表快速跳轉日期">
+              <i class="fa-solid fa-calendar-days text-indigo-600 mr-1.5 text-xs"></i>
+              <input type="date" id="room-schedule-date-picker" onchange="jumpToRoomScheduleDate(this.value)"
+                class="bg-transparent text-slate-700 text-xs sm:text-sm font-medium border-0 focus:outline-none cursor-pointer p-0">
+            </div>
+          </div>
+
+          <!-- 列印本頁按鈕 -->
+          <button type="button" onclick="printLabRoomSchedule()"
+            class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs sm:text-sm rounded-lg flex items-center gap-1.5 shadow-sm transition">
+            <i class="fa-solid fa-print"></i> 列印本頁
+          </button>
+
+          <button type="button" onclick="closeLabRoomScheduleModal()"
+            class="w-8 h-8 flex items-center justify-center rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition ml-1">
+            <i class="fa-solid fa-xmark text-xl"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- X軸 日期標頭 -->
+      <div class="flex shrink-0 border-b border-slate-200 shadow-sm z-10 relative" id="room-schedule-header">
+        <!-- 由 JS 動態生成 (左側空白 + 週一到週五) -->
+      </div>
+
+      <!-- 表格主體 (時間網格) -->
+      <div class="flex-1 overflow-y-auto bg-slate-50 relative no-scrollbar pb-6">
+        <div class="flex min-w-[700px]" id="room-schedule-body">
+          <!-- 由 JS 動態生成 (Y軸時間 + 5天行事曆內容) -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- 注入的腳本 -->
+
+</div>

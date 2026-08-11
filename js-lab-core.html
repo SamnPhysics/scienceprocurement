@@ -1,0 +1,340 @@
+<script>
+  // ==========================================
+  // js-lab-core.html — 實驗室預約模組：資料/狀態/工具
+  // 職責：全域常數、後端資料、日期工具、視圖切換、篩選工具
+  // 包含優化A：filterBookingsByRoomAndDate 共用過濾函數（消除三重複製）
+  // 載入順序：依賴 js-core.html
+  // ==========================================
+
+  // 時間軸範圍常數 (08:00 - 18:00)
+  const LAB_START_HOUR = 8;
+  const LAB_END_HOUR = 18;
+  const LAB_TOTAL_HOURS = LAB_END_HOUR - LAB_START_HOUR;
+  const LAB_TOTAL_MINUTES = LAB_TOTAL_HOURS * 60;
+
+  // 後端資料狀態（初始化為空）
+  let labRooms = [];
+  let labBookings = [];
+  let labWeeklyBookings = {};
+  let labPeriodsData = [];
+
+  // 目前視圖與日期狀態
+  let labCurrentView = 'day';
+  let labCurrentDate = new Date();
+
+  // ========== 工具函數 ==========
+
+  // 姓名隱私遮蔽（未登入：趙臨軒→趙O軒；單名→最後一字；登入後顯示全名）
+  function maskName(name) {
+    if (currentUserEmail && currentUserEmail.trim() !== '') return name || '';
+    if (!name || String(name).trim() === '') return '無';
+    const str = String(name).trim();
+    if (str === '無') return str;
+    if (str.length === 1) return str;
+    if (str.length === 2) return str.charAt(0) + 'O';
+    return str.charAt(0) + 'O'.repeat(str.length - 2) + str.charAt(str.length - 1);
+  }
+
+  // 判斷是否為學生帳號（學生帳號為六位數字，非四位數字）
+  function isStudentAccount(email) {
+    if (!email) return false;
+    const norm = String(email).trim().toLowerCase();
+    if (window.currentAuthRole === 'admin' || norm === '5501@fhsh.khc.edu.tw' || norm === '5502@fhsh.khc.edu.tw') {
+      return false;
+    }
+    return /^(s?\d{6})@/i.test(norm);
+  }
+
+  // 判斷預約是否屬於目前登入帳號（用於顯示綠色「您的預約」樣式）
+  function isMyBooking(booking) {
+    if (!booking) return false;
+    const email = (typeof currentUserEmail !== 'undefined' ? currentUserEmail : (window.currentUserEmail || '')).toLowerCase().trim();
+    if (!email) return false;
+    const displayName = (typeof currentUserDisplayName !== 'undefined' ? currentUserDisplayName : (window.currentUserDisplayName || (email ? email.split('@')[0] : ''))).toLowerCase().trim();
+    const bEmail = String(booking.email || '').toLowerCase().trim();
+    const bTeacher = String(booking.teacher || '').toLowerCase().trim();
+    const bStudent = String(booking.student || '').toLowerCase().trim();
+    const bUser = String(booking.user || '').toLowerCase().trim();
+
+    return (bEmail !== '' && bEmail === email) ||
+      (bUser !== '' && (bUser === displayName || bUser === email.split('@')[0])) ||
+      (bTeacher !== '' && (bTeacher === displayName || bTeacher === email.split('@')[0])) ||
+      (bStudent !== '' && (bStudent === displayName || bStudent === email.split('@')[0]));
+  }
+
+  // 取得預約區塊的主題樣式與色彩
+  function getBookingColor(booking) {
+    if (isMyBooking(booking)) {
+      return 'bg-emerald-50 border-l-4 border-emerald-500 text-emerald-900';
+    }
+    return 'bg-indigo-50 border-l-4 border-indigo-500 text-indigo-900';
+  }
+
+  // 本地 ISO 日期字串產生（避免時區偏移）
+  function getLabLocalIsoDate(date) {
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  // 時間字串轉換為百分比位置和寬度
+  function calculateLabTimePosition(startStr, endStr) {
+    const [startH, startM] = startStr.split(':').map(Number);
+    const [endH, endM] = endStr.split(':').map(Number);
+    const startMinutesFromBase = (startH - LAB_START_HOUR) * 60 + startM;
+    const durationMinutes = ((endH - startH) * 60) + (endM - startM);
+    const leftPercent = (startMinutesFromBase / LAB_TOTAL_MINUTES) * 100;
+    const widthPercent = (durationMinutes / LAB_TOTAL_MINUTES) * 100;
+    return { left: Math.max(0, leftPercent), width: Math.min(100 - leftPercent, widthPercent) };
+  }
+
+  // 優化A：共用預約過濾函數，消除 renderLabTimeline / renderLabWeekGrid / renderLabRoomScheduleContent
+  // 及 printLabRoomSchedule 中三重複製的過濾邏輯
+  function filterBookingsByRoomAndDate(bookings, room, dateIso) {
+    return bookings.filter(b => {
+      if (!b || !b.roomId || !b.date) return false;
+      const strRoomId = String(b.roomId).trim();
+      const isRoomMatch = strRoomId === String(room.id).trim()
+        || strRoomId === String(room.name).trim()
+        || String(room.name).trim().includes(strRoomId);
+      const cleanBDate = String(b.date).trim().split('T')[0].replace(/\//g, '-');
+      return isRoomMatch && (cleanBDate === dateIso || cleanBDate.startsWith(dateIso));
+    });
+  }
+
+  // 取得篩選後的實驗室列表（依關鍵字和大樓/區域）
+  function getFilteredLabRooms() {
+    const searchInput = document.getElementById('lab-search-input');
+    const buildingSelect = document.getElementById('lab-building-select');
+    const keyword = searchInput ? searchInput.value.trim().toLowerCase() : '';
+    const selectedBuilding = buildingSelect ? buildingSelect.value.trim() : '';
+
+    return labRooms.filter(room => {
+      const roomLoc = String(room.location || '').trim();
+      const passBuilding = !selectedBuilding || roomLoc === selectedBuilding;
+      const passKeyword = !keyword || (
+        String(room.name || '').toLowerCase().includes(keyword) ||
+        String(room.id || '').toLowerCase().includes(keyword) ||
+        String(room.location || '').toLowerCase().includes(keyword) ||
+        String(room.floor || '').toLowerCase().includes(keyword)
+      );
+      return passBuilding && passKeyword;
+    });
+  }
+
+  // ========== 後端資料串接 ==========
+
+  // 更新表單選項（使用優化D：DocumentFragment）
+  function updateLabFormOptions() {
+    const roomSelect = document.getElementById('modal-room-id');
+    if (!roomSelect) return;
+
+    // 優化D：用 DocumentFragment 批次插入 option，避免迴圈中反覆觸發 DOM repaint
+    const roomFrag = document.createDocumentFragment();
+    const defaultOpt = document.createElement('option');
+    defaultOpt.value = ''; defaultOpt.textContent = '請選擇...';
+    roomFrag.appendChild(defaultOpt);
+    labRooms.forEach(r => {
+      const opt = document.createElement('option');
+      opt.value = r.id;
+      opt.textContent = `${r.name} (${r.capacity}人${r.floor ? ' / ' + r.floor : ''})`;
+      roomFrag.appendChild(opt);
+    });
+    roomSelect.innerHTML = '';
+    roomSelect.appendChild(roomFrag);
+
+    const buildingSelect = document.getElementById('lab-building-select');
+    if (buildingSelect) {
+      const currentVal = buildingSelect.value;
+      const locations = [...new Set(labRooms.map(r => String(r.location || '').trim()).filter(Boolean))];
+
+      const bldgFrag = document.createDocumentFragment();
+      const allOpt = document.createElement('option');
+      allOpt.value = ''; allOpt.textContent = '所有大樓 / 區域';
+      bldgFrag.appendChild(allOpt);
+      locations.forEach(loc => {
+        const opt = document.createElement('option');
+        opt.value = loc; opt.textContent = loc;
+        if (loc === currentVal) opt.selected = true;
+        bldgFrag.appendChild(opt);
+      });
+      buildingSelect.innerHTML = '';
+      buildingSelect.appendChild(bldgFrag);
+    }
+
+    const periodsContainer = document.getElementById('modal-periods');
+    if (periodsContainer && labPeriodsData && labPeriodsData.length > 0) {
+      const periodFrag = document.createDocumentFragment();
+      labPeriodsData.forEach(p => {
+        const label = document.createElement('label');
+        label.className = 'flex items-center gap-2 text-sm';
+        label.innerHTML = `<input type="checkbox" value="${p.name}" data-start="${p.start || ''}" data-end="${p.end || ''}" class="rounded text-indigo-600 focus:ring-indigo-500"> ${p.name}`;
+        periodFrag.appendChild(label);
+      });
+      periodsContainer.innerHTML = '';
+      periodsContainer.appendChild(periodFrag);
+    }
+  }
+
+  function fetchLabBackendData() {
+    if (typeof google !== 'undefined' && google.script && window.SystemCache) {
+      window.SystemCache.fetchData('labData', () => window.callGas('getLabData'), (response, err) => {
+        if (err) {
+          console.error("讀取資料失敗:", err);
+          alert("無法取得實驗室與預約資料，請稍後再試。");
+          renderLabContent();
+          return;
+        }
+        if (response) {
+          labRooms = response.rooms || [];
+          labBookings = response.bookings || [];
+          labWeeklyBookings = response.weeklyBookings || {};
+          labPeriodsData = response.periods || [];
+          updateLabFormOptions();
+        }
+        renderLabContent();
+      });
+    } else {
+      console.warn("未偵測到 GAS 環境，目前以空資料顯示。");
+      updateLabFormOptions();
+      renderLabContent();
+    }
+  }
+
+  // ========== 視圖控制 ==========
+
+  function switchLabView(view) {
+    labCurrentView = view;
+    const btnDay = document.getElementById('btn-day-view');
+    const btnWeek = document.getElementById('btn-week-view');
+
+    if (view === 'day') {
+      btnDay.className = 'px-4 py-1.5 rounded-md bg-white text-indigo-600 shadow-sm transition';
+      btnWeek.className = 'px-4 py-1.5 rounded-md text-gray-500 hover:text-gray-800 transition';
+      document.getElementById('time-header').classList.remove('hidden');
+      document.getElementById('time-header').classList.add('flex');
+      document.getElementById('week-header').classList.add('hidden');
+      document.getElementById('week-header').classList.remove('grid');
+      document.getElementById('current-time-legend').style.display = 'flex';
+      document.getElementById('current-time-line').style.display = 'block';
+      updateLabDateDisplay('day');
+    } else {
+      btnWeek.className = 'px-4 py-1.5 rounded-md bg-white text-indigo-600 shadow-sm transition';
+      btnDay.className = 'px-4 py-1.5 rounded-md text-gray-500 hover:text-gray-800 transition';
+      document.getElementById('time-header').classList.add('hidden');
+      document.getElementById('time-header').classList.remove('flex');
+      document.getElementById('week-header').classList.remove('hidden');
+      document.getElementById('week-header').classList.add('grid');
+      document.getElementById('current-time-legend').style.display = 'none';
+      document.getElementById('current-time-line').style.display = 'none';
+      updateLabDateDisplay('week');
+    }
+    renderLabContent();
+  }
+
+  function updateLabDateDisplay(view) {
+    const display = document.getElementById('current-date-display');
+    const dayNames = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
+    const yyyy = labCurrentDate.getFullYear();
+    const mm = labCurrentDate.getMonth() + 1;
+    const dd = labCurrentDate.getDate();
+    const dayStr = dayNames[labCurrentDate.getDay()];
+
+    if (view === 'day') {
+      const isToday = (getLabLocalIsoDate(labCurrentDate) === getLabLocalIsoDate(new Date()));
+      display.innerText = `${yyyy}年${mm}月${dd}日 (${dayStr})${isToday ? " (今日)" : ""}`;
+    } else {
+      let dayOfWeek = labCurrentDate.getDay();
+      if (dayOfWeek === 0) dayOfWeek = 7;
+      const monday = new Date(labCurrentDate);
+      monday.setDate(labCurrentDate.getDate() - (dayOfWeek - 1));
+      const friday = new Date(labCurrentDate);
+      friday.setDate(labCurrentDate.getDate() + (5 - dayOfWeek));
+
+      const now = new Date();
+      let nowDay = now.getDay();
+      if (nowDay === 0) nowDay = 7;
+      const thisMonday = new Date(now);
+      thisMonday.setDate(now.getDate() - (nowDay - 1));
+      const isCurrentWeek = (getLabLocalIsoDate(monday) === getLabLocalIsoDate(thisMonday));
+
+      display.innerText = `${yyyy}年 ${monday.getMonth() + 1}月${monday.getDate()}日 - ${friday.getMonth() + 1}月${friday.getDate()}日${isCurrentWeek ? " (當週)" : ""}`;
+
+      // 優化D：週表頭使用 DocumentFragment 批次更新
+      const weekHeader = document.getElementById('week-header');
+      if (weekHeader) {
+        const todayIso = getLabLocalIsoDate(new Date()).trim();
+        const frag = document.createDocumentFragment();
+        for (let i = 0; i < 5; i++) {
+          let d = new Date(monday);
+          d.setDate(monday.getDate() + i);
+          const dIso = getLabLocalIsoDate(d).trim();
+          const isToday = (dIso === todayIso);
+          const div = document.createElement('div');
+          div.className = isToday
+            ? 'text-center py-2 text-indigo-600 font-bold bg-indigo-50/50'
+            : 'text-center py-2';
+          div.textContent = `${dayNames[i + 1]} (${d.getMonth() + 1}/${d.getDate()})${isToday ? ' 今日' : ''}`;
+          frag.appendChild(div);
+        }
+        weekHeader.innerHTML = '';
+        weekHeader.appendChild(frag);
+      }
+    }
+  }
+
+  function changeLabDate(offset) {
+    const shift = (labCurrentView === 'week') ? offset * 7 : offset;
+    labCurrentDate.setDate(labCurrentDate.getDate() + shift);
+    updateLabDateDisplay(labCurrentView);
+    renderLabContent();
+  }
+
+  // 統籌渲染（委派給 js-lab-render.html）
+  function renderLabContent() {
+    const container = document.getElementById('rooms-container');
+    if (!container) return;
+    container.innerHTML = '';
+    if (labCurrentView === 'day') {
+      renderLabTimeline();
+      updateLabCurrentTimeLine();
+    } else {
+      renderLabWeekGrid();
+    }
+  }
+
+  // 更新目前時間指示線
+  function updateLabCurrentTimeLine() {
+    const line = document.getElementById('current-time-line');
+    if (!line) return;
+
+    // 檢查視圖且僅在顯示「今日」時呈獻指示線
+    const isToday = (getLabLocalIsoDate(labCurrentDate) === getLabLocalIsoDate(new Date()));
+    if (labCurrentView !== 'day' || !isToday) {
+      line.classList.add('hidden');
+      line.style.display = 'none';
+      return;
+    }
+
+    const now = new Date();
+    const h = now.getHours();
+    const m = now.getMinutes();
+
+    if (h >= LAB_START_HOUR && h < LAB_END_HOUR) {
+      line.classList.remove('hidden');
+      line.classList.add('flex');
+      line.style.display = 'flex';
+      const minutesFromStart = (h - LAB_START_HOUR) * 60 + m;
+      const ratio = minutesFromStart / LAB_TOTAL_MINUTES;
+      // 扣除左側 176px (w-44) 側邊欄，對右側剩餘的時間軸範圍進行百分比計算
+      line.style.left = `calc(176px + (100% - 176px) * ${ratio})`;
+    } else {
+      line.classList.add('hidden');
+      line.style.display = 'none';
+    }
+  }
+
+  // 每分鐘動態重算更新時間指示線
+  setInterval(updateLabCurrentTimeLine, 60000);
+</script>

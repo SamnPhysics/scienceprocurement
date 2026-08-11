@@ -1,0 +1,394 @@
+<script>
+  // ==========================================
+  // js-admin.html — 管理功能、資料清單、系統設定
+  // 職責：renderDatalist、批次更新(優化E)、匯出、系統設定、Logo上傳
+  // 共用工具：getStatusBadge、formatDateOnly、filterByDate、populateYearFilters
+  // 載入順序：依賴 js-core.html、js-ui-widgets.html
+  // ==========================================
+
+  // 已抽離至 js-config.html
+
+  // 重新整理目前的資料清單
+  function refreshDatalist() {
+    renderDatalist(currentActionView, currentSystemTab);
+  }
+
+  // 動態渲染共用清單 (Entry Point)
+  function renderDatalist(role, system) {
+    const titleEl = document.getElementById('datalist-title');
+    const theadEl = document.getElementById('datalist-thead');
+    const searchInput = document.getElementById('datalist-filter-keyword');
+    const btnCancel = document.getElementById('datalist-btn-cancel');
+    const btnExport = document.getElementById('datalist-btn-export');
+    const tbody = document.getElementById('datalist-tbody');
+
+    if (!datalistManager && typeof window.ensureDatalistManager === 'function') {
+      window.ensureDatalistManager();
+    }
+    if (!datalistManager) return;
+    
+    tbody.innerHTML = '<tr><td colspan="15" class="p-4 text-center text-slate-400">載入資料中...</td></tr>';
+
+    const sysNameMap = { 'equip': '教學及實驗設備', 'lab': '自然科實驗室借用', 'equipBorrow': '教學實驗設備借用', 'chem': '藥品/物品' };
+    const sysName = sysNameMap[system] || sysNameMap['chem'];
+
+    if (role === 'user-list') {
+      renderUserDatalist(system, titleEl, theadEl, searchInput, btnCancel, btnExport, tbody, sysName);
+    } else if (role === 'admin') {
+      renderAdminDatalist(system, titleEl, theadEl, searchInput, btnCancel, btnExport, tbody, sysName);
+    }
+  }
+
+  function _setupDatalistHeaderAndRow(system, role, theadEl) {
+    const columns = TABLE_COLUMNS_CONFIG[system] && TABLE_COLUMNS_CONFIG[system][role] ? TABLE_COLUMNS_CONFIG[system][role] : [];
+    
+    if (theadEl) {
+      theadEl.innerHTML = '<tr>' + columns.map(c => `<th class="${c.thClass || 'p-3'}">${c.header}</th>`).join('') + '</tr>';
+    }
+    
+    datalistManager.config.colSpan = columns.length;
+    
+    datalistManager.config.renderRow = function (item) {
+      const titleText = system === 'equip' || system === 'equipBorrow' ? (system === 'equipBorrow' ? '借用說明：' : '需求及用途說明：') : '備註：';
+      const remark = (item.purpose || item.remark || '無').replace(/"/g, '&quot;');
+      const photo = item.photoUrl || '無照片';
+      
+      const tds = columns.map(c => c.render(item, system)).join('');
+      
+      return `<tr class="hover:bg-slate-50 border-b border-slate-100 cursor-default tooltip-trigger" data-title="${titleText}" data-remark="${remark}" data-photo="${photo}">${tds}</tr>`;
+    };
+  }
+
+  function renderUserDatalist(system, titleEl, theadEl, searchInput, btnCancel, btnExport, tbody, sysName) {
+    titleEl.textContent = `${sysName}申請清單`;
+    if (searchInput) searchInput.classList.add('hidden');
+    if (btnCancel) btnCancel.classList.toggle('hidden', system === 'equipBorrow');
+    if (btnExport) btnExport.classList.add('hidden');
+
+    const btnBatchUpdate = document.getElementById('datalist-btn-batch-update');
+    if (btnBatchUpdate) { btnBatchUpdate.classList.add('hidden'); btnBatchUpdate.classList.remove('flex'); }
+
+    datalistManager.config.calculateSum = (system !== 'equipBorrow');
+    datalistManager.config.sumField = (system === 'equip') ? 'price' : 'totalPrice';
+    datalistManager.config.sumTitle = (system === 'equip') ? '本頁自估單價加總：' : '本頁採購總價加總：';
+    datalistManager.config.applicantFilterId = null;
+
+    _setupDatalistHeaderAndRow(system, 'user-list', theadEl);
+    
+    datalistManager.config.onRender = () => { const cb = document.getElementById("user-select-all"); if (cb) cb.checked = false; };
+
+    SystemCache.fetchData(`user_${system}`, () => window.callGas('getUserData', getToken(), system), (data, err) => {
+      if (currentActionView !== 'user-list' || currentSystemTab !== system) return;
+      if (err) { tbody.innerHTML = `<tr><td colspan="${datalistManager.config.colSpan}" class="p-4 text-center text-red-500">載入資料失敗：${err.message || err}</td></tr>`; return; }
+      datalistManager.setData(data);
+    });
+  }
+
+  function renderAdminDatalist(system, titleEl, theadEl, searchInput, btnCancel, btnExport, tbody, sysName) {
+    titleEl.textContent = `${sysName}審核面板`;
+    if (searchInput) searchInput.classList.remove('hidden');
+    if (btnCancel) btnCancel.classList.add('hidden');
+    if (btnExport) btnExport.classList.remove('hidden');
+
+    const btnBatchUpdate = document.getElementById('datalist-btn-batch-update');
+    if (btnBatchUpdate) {
+      if (['chem', 'equip', 'equipBorrow'].includes(system)) {
+        btnBatchUpdate.classList.remove('hidden'); btnBatchUpdate.classList.add('flex');
+      } else {
+        btnBatchUpdate.classList.add('hidden'); btnBatchUpdate.classList.remove('flex');
+      }
+    }
+
+    datalistManager.config.calculateSum = false;
+    datalistManager.config.applicantFilterId = 'datalist-filter-keyword';
+
+    _setupDatalistHeaderAndRow(system, 'admin', theadEl);
+
+    datalistManager.config.onRender = () => { const cb = document.getElementById("admin-select-all"); if (cb) cb.checked = false; };
+
+    SystemCache.fetchData(`admin_${system}`, () => window.callGas('getAdminData', getToken(), system), (data, err) => {
+      if (currentActionView !== 'admin' || currentSystemTab !== system) return;
+      if (err) { tbody.innerHTML = `<tr><td colspan="${datalistManager.config.colSpan}" class="p-4 text-center text-red-500">載入資料失敗：${err.message || err}</td></tr>`; return; }
+      datalistManager.setData(data);
+    });
+  }
+
+  // 更新狀態與採購總價
+  function updateStatus(rowNumber, newStatus, totalPrice, btnEl) {
+    if (btnEl) { btnEl.disabled = true; btnEl.innerText = '更新中...'; btnEl.classList.add('opacity-70', 'cursor-not-allowed'); }
+
+    google.script.run
+      .withSuccessHandler(function (res) {
+        if (btnEl) { btnEl.disabled = false; btnEl.innerText = '更新'; btnEl.classList.remove('opacity-70', 'cursor-not-allowed'); }
+        if (res.success) {
+          if (datalistManager && datalistManager.rawData) {
+            const item = datalistManager.rawData.find(i => i.rowNumber === rowNumber);
+            if (item) { item.status = newStatus; item.totalPrice = totalPrice; }
+            datalistManager.render();
+          }
+          alert('狀態與金額更新成功！');
+        } else {
+          alert('狀態與金額更新失敗：' + (res.message || '未知錯誤'));
+          refreshDatalist();
+        }
+      })
+      .withFailureHandler(function (err) {
+        if (btnEl) { btnEl.disabled = false; btnEl.innerText = '更新'; btnEl.classList.remove('opacity-70', 'cursor-not-allowed'); }
+        alert('連線失敗，更新未成功：' + err.message);
+        refreshDatalist();
+      })
+      .updateProcurementStatus(rowNumber, newStatus, totalPrice, getToken(), currentSystemTab);
+  }
+
+  function handleUpdateClick(rowNumber, btnEl) {
+    const statusEl = document.getElementById(`status-select-${rowNumber}`);
+    const priceEl = document.getElementById(`price-input-${rowNumber}`);
+    if (statusEl && priceEl) updateStatus(rowNumber, statusEl.value, priceEl.value, btnEl);
+  }
+
+  function toggleSelectAllUsers(isChecked) {
+    document.querySelectorAll('.user-row-checkbox').forEach(cb => cb.checked = isChecked);
+  }
+
+  async function cancelSelectedRequests() {
+    const checkboxes = document.querySelectorAll('.user-row-checkbox:checked');
+    if (checkboxes.length === 0) { alert('請先勾選要取消的請購項目！'); return; }
+
+    const rowNumbers = Array.from(checkboxes).map(cb => parseInt(cb.value));
+    const isConfirmed = await showConfirm(`您確定要取消這 ${rowNumbers.length} 筆請購項目嗎？此動作將會從資料庫中永久刪除！`);
+    if (!isConfirmed) return;
+
+    const cancelBtn = document.querySelector('button[onclick="cancelSelectedRequests()"]');
+    if (cancelBtn) { cancelBtn.disabled = true; cancelBtn.textContent = '處理中...'; }
+
+    google.script.run
+      .withSuccessHandler(function (res) {
+        if (cancelBtn) { cancelBtn.disabled = false; cancelBtn.textContent = '取消申請'; }
+        if (res.success) { alert('成功取消請購申請！'); refreshDatalist(); }
+        else alert('取消失敗：' + (res.message || '未知錯誤'));
+      })
+      .withFailureHandler(function (err) {
+        if (cancelBtn) { cancelBtn.disabled = false; cancelBtn.textContent = '取消申請'; }
+        alert('連線失敗，取消未成功：' + err.message);
+      })
+      .deleteUserRequests(rowNumbers, getToken(), currentSystemTab);
+  }
+
+  // 優化E：batchUpdateAdminRequests 替換原生 prompt() 為 showConfirm
+  async function batchUpdateAdminRequests() {
+    const checkboxes = document.querySelectorAll('.user-row-checkbox:checked');
+    if (checkboxes.length === 0) { alert('請先勾選要批次更新的項目！'); return; }
+
+    const options = STATUS_OPTIONS[currentSystemTab] || STATUS_OPTIONS.chem;
+    const newStatus = await showSelectModal('請選擇要批次變更的狀態：', options);
+    if (!newStatus) return;
+
+    const updates = Array.from(checkboxes).map(cb => {
+      const rowNum = parseInt(cb.value);
+      const priceEl = document.getElementById(`price-input-${rowNum}`);
+      return { rowNumber: rowNum, newStatus: newStatus, totalPrice: priceEl ? priceEl.value : '' };
+    });
+
+    const isConfirmed = await showConfirm(`您確定要批次將這 ${updates.length} 筆項目的狀態變更為「${newStatus}」嗎？`);
+    if (!isConfirmed) return;
+
+    const btn = document.getElementById('datalist-btn-batch-update');
+    if (btn) { btn.disabled = true; btn.textContent = '處理中...'; }
+
+    google.script.run
+      .withSuccessHandler(function (res) {
+        if (btn) { btn.disabled = false; btn.innerHTML = `<svg class="w-4 h-4 mr-1 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>批次更新`; }
+        if (res.success) { alert('批次更新成功！'); refreshDatalist(); }
+        else { alert('更新失敗：' + (res.message || '未知錯誤')); refreshDatalist(); }
+      })
+      .withFailureHandler(function (err) {
+        if (btn) { btn.disabled = false; btn.innerHTML = `<svg class="w-4 h-4 mr-1 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>批次更新`; }
+        alert('連線失敗，更新未成功：' + err.message);
+        refreshDatalist();
+      })
+      .batchUpdateProcurementStatus(updates, getToken(), currentSystemTab);
+  }
+
+  // 匯出管理者資料為 Excel
+  function exportAdminDataToExcel() {
+    if (typeof XLSX === 'undefined') { alert('Excel 匯出模組載入失敗，請檢查網路連線。'); return; }
+    const filteredAdminData = datalistManager ? datalistManager.filteredData : null;
+    if (!filteredAdminData || filteredAdminData.length === 0) { alert('沒有符合篩選條件的資料可以匯出。'); return; }
+
+    const exportConfig = SYSTEM_EXPORT_CONFIGS[currentSystemTab] || SYSTEM_EXPORT_CONFIGS.chem;
+    const exportData = filteredAdminData.map(item => {
+      const row = {};
+      exportConfig.columns.forEach(col => {
+        row[col.label] = col.value(item);
+      });
+      return row;
+    });
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wscols = exportConfig.columns.map(col => ({ wch: Math.max(col.label.length * 2, 12) }));
+    ws['!cols'] = wscols;
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, exportConfig.sheetName);
+
+    const elYear = document.getElementById('datalist-filter-year');
+    const elMonth = document.getElementById('datalist-filter-month');
+    const elApp = document.getElementById('datalist-filter-keyword');
+    const yearStr = elYear && elYear.value ? elYear.value + '年' : '全部年份';
+    const monthStr = elMonth && elMonth.value ? elMonth.value + '月' : '全部月份';
+    const applicantStr = elApp && elApp.value.trim() ? '_' + elApp.value.trim() : '';
+    XLSX.writeFile(wb, `${exportConfig.fileName}_${yearStr}_${monthStr}${applicantStr}.xlsx`);
+  }
+
+  // 系統設定管理邏輯
+  function loadSystemSettings() {
+    const btnBase = document.getElementById('btn-save-base-settings');
+    const btnAdv = document.getElementById('btn-save-adv-settings');
+
+    if (btnBase) { btnBase.innerText = '載入中...'; btnBase.disabled = true; }
+    if (btnAdv) { btnAdv.innerText = '載入中...'; btnAdv.disabled = true; }
+
+    google.script.run
+      .withSuccessHandler(function (response) {
+        if (btnBase) { btnBase.innerText = '儲存基礎設定'; btnBase.disabled = false; }
+        if (btnAdv) { btnAdv.innerText = '儲存進階參數'; btnAdv.disabled = false; }
+        if (response.success && response.data) {
+          const props = response.data;
+          for (const key in props) {
+            const el = document.getElementById('setting_' + key);
+            if (el) {
+              el.value = props[key];
+              if (key === 'LOGO_ID' && typeof showLogoPreview === 'function') showLogoPreview(props[key]);
+            }
+          }
+        } else {
+          alert('載入設定失敗：' + response.message);
+        }
+      })
+      .withFailureHandler(function (err) {
+        if (btnBase) { btnBase.innerText = '儲存基礎設定'; btnBase.disabled = false; }
+        if (btnAdv) { btnAdv.innerText = '儲存進階參數'; btnAdv.disabled = false; }
+        alert('連線失敗：' + err.message);
+      })
+      .getSystemSettings(getToken());
+  }
+
+  async function _saveSettings(keys, btnId) {
+    const settingsObj = {};
+    keys.forEach(key => {
+      const el = document.getElementById('setting_' + key);
+      if (el) settingsObj[key] = el.value.trim();
+    });
+
+    const btnSave = document.getElementById(btnId);
+    const originalText = btnSave.innerText;
+    btnSave.innerText = '儲存中...'; btnSave.disabled = true;
+
+    google.script.run
+      .withSuccessHandler(function (response) {
+        btnSave.innerText = originalText; btnSave.disabled = false;
+        if (response.success) { alert(response.message); window.top.location.reload(); }
+        else alert('儲存失敗：' + response.message);
+      })
+      .withFailureHandler(function (err) {
+        btnSave.innerText = originalText; btnSave.disabled = false;
+        alert('連線失敗：' + err.message);
+      })
+      .saveSystemSettings(settingsObj, getToken());
+  }
+
+  async function handleBaseSettingsSubmit() {
+    const isConfirmed = await showConfirm('確定要儲存基礎設定嗎？');
+    if (!isConfirmed) return;
+    await _saveSettings(['SYSTEM_TITLE', 'SCHOOL_NAME', 'SCHOOL_PHONE', 'SCHOOL_ADDRESS', 'SYSTEM_DESC', 'LOGO_ID'], 'btn-save-base-settings');
+  }
+
+  async function handleAdvancedSettingsSubmit() {
+    const isConfirmed1 = await showConfirm('確定要儲存進階系統參數嗎？\n請注意，修改這些參數可能導致系統暫時無法運作。');
+    if (!isConfirmed1) return;
+    const isConfirmed2 = await showConfirm('【再次確認】\n您即將修改 SPREADSHEET_ID 等核心變數。\n若設定錯誤將導致系統完全無法登入或存取資料，確定要繼續修改嗎？');
+    if (!isConfirmed2) return;
+    await _saveSettings(['ADMIN_EMAILS', 'ALLOWED_DOMAIN', 'SPREADSHEET_ID', 'EQUIP_SHEET_ID', 'EQUIP_BORROW_SHEET_ID', 'LAB_SPREADSHEET_ID', 'FOLDER_ID', 'WEB_APP_URL', 'ADMIN_BACKEND_URL', 'CLIENT_ID', 'CLIENT_SECRET'], 'btn-save-adv-settings');
+  }
+
+  // Logo 上傳邏輯
+  function showLogoPreview(fileId) {
+    const previewContainer = document.getElementById('logo-preview-container');
+    const previewImg = document.getElementById('logo-preview-img');
+    if (!previewContainer || !previewImg) return;
+    if (!fileId) { previewContainer.classList.add('hidden'); return; }
+    previewImg.src = `https://drive.google.com/thumbnail?id=${fileId}&sz=w300`;
+    previewContainer.classList.remove('hidden');
+  }
+
+  function handleLogoUpload(file) {
+    if (!file || !file.type.startsWith('image/')) { alert('請上傳圖片檔案'); return; }
+    const uploadZone = document.getElementById('logo-upload-zone');
+    const statusMsg = document.getElementById('logo-upload-status');
+    const settingLogoId = document.getElementById('setting_LOGO_ID');
+
+    const reader = new FileReader();
+    reader.onload = function (e) {
+      const dataUrl = e.target.result;
+      const splitData = dataUrl.split(',');
+      const contentType = splitData[0].split(':')[1].split(';')[0];
+      const base64Data = splitData[1];
+
+      const previewContainer = document.getElementById('logo-preview-container');
+      const previewImg = document.getElementById('logo-preview-img');
+      if (previewImg && previewContainer) { previewImg.src = dataUrl; previewContainer.classList.remove('hidden'); }
+
+      if (statusMsg) statusMsg.classList.remove('hidden');
+      if (uploadZone) { uploadZone.style.pointerEvents = 'none'; uploadZone.classList.add('opacity-70'); }
+
+      google.script.run
+        .withSuccessHandler(function (res) {
+          if (statusMsg) statusMsg.classList.add('hidden');
+          if (uploadZone) { uploadZone.style.pointerEvents = 'auto'; uploadZone.classList.remove('opacity-70'); }
+          if (res.success) { if (settingLogoId) settingLogoId.value = res.fileId; showLogoPreview(res.fileId); }
+          else alert('Logo 上傳失敗：' + res.message);
+        })
+        .withFailureHandler(function (err) {
+          if (statusMsg) statusMsg.classList.add('hidden');
+          if (uploadZone) { uploadZone.style.pointerEvents = 'auto'; uploadZone.classList.remove('opacity-70'); }
+          alert('Logo 上傳發生錯誤：' + err.message);
+        })
+        .uploadLogoImage(base64Data, contentType, file.name || 'logo.png', getToken());
+    };
+    reader.readAsDataURL(file);
+  }
+
+  // 綁定 Logo 上傳區塊事件
+  function initAdminEvents() {
+    const logoUploadZone = document.getElementById('logo-upload-zone');
+    const logoFileInput = document.getElementById('logo-file-input');
+    const settingLogoIdInput = document.getElementById('setting_LOGO_ID');
+
+    if (logoUploadZone && logoFileInput) {
+      logoUploadZone.addEventListener('click', () => logoFileInput.click());
+      logoFileInput.addEventListener('change', (e) => { if (e.target.files && e.target.files[0]) handleLogoUpload(e.target.files[0]); });
+      logoUploadZone.addEventListener('dragover', (e) => { e.preventDefault(); logoUploadZone.classList.add('border-blue-400', 'bg-blue-50'); });
+      ['dragleave', 'dragend'].forEach(type => {
+        logoUploadZone.addEventListener(type, () => logoUploadZone.classList.remove('border-blue-400', 'bg-blue-50'));
+      });
+      logoUploadZone.addEventListener('drop', (e) => {
+        e.preventDefault(); logoUploadZone.classList.remove('border-blue-400', 'bg-blue-50');
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) handleLogoUpload(e.dataTransfer.files[0]);
+      });
+      logoUploadZone.addEventListener('paste', (e) => {
+        const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+        for (let item of items) {
+          if (item.type.indexOf('image') === 0) { handleLogoUpload(item.getAsFile()); break; }
+        }
+      });
+    }
+
+    if (settingLogoIdInput) {
+      settingLogoIdInput.addEventListener('input', () => showLogoPreview(settingLogoIdInput.value));
+    }
+  }
+
+  // 初始化管理員事件
+  document.addEventListener("DOMContentLoaded", () => {
+    initAdminEvents();
+  });
+</script>

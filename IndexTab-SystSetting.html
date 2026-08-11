@@ -1,0 +1,187 @@
+<div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+  <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b pb-3">
+    <h2 class="text-xl font-bold text-slate-900">系統環境變數設定</h2>
+    <div class="flex items-center gap-3">
+      <button onclick="switchGlobalView('main')"
+        class="px-3 py-1.5 bg-slate-100 text-slate-700 rounded border hover:bg-slate-200 text-sm font-medium transition">
+        返回系統
+      </button>
+    </div>
+  </div>
+
+
+
+  <form id="settingsForm" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <!-- 系統基礎設定 -->
+    <div class="space-y-4 md:col-span-2">
+      <div class="flex justify-between items-center border-b pb-2">
+        <h3 class="font-semibold text-slate-800">基礎設定</h3>
+        <button type="button" onclick="handleBaseSettingsSubmit()" id="btn-save-base-settings"
+          class="px-3 py-1.5 bg-blue-600 text-white rounded border border-blue-600 hover:bg-blue-700 text-sm font-medium transition shadow-sm">
+          儲存基礎設定
+        </button>
+      </div>
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-slate-700 mb-1">系統標題 (SYSTEM_TITLE)</label>
+      <input type="text" id="setting_SYSTEM_TITLE"
+        class="w-full rounded border-slate-300 p-2 text-sm bg-slate-50 focus:bg-white focus:ring-blue-500 focus:border-blue-500 border">
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-slate-700 mb-1">學校名稱 (SCHOOL_NAME)</label>
+      <input type="text" id="setting_SCHOOL_NAME"
+        class="w-full rounded border-slate-300 p-2 text-sm bg-slate-50 focus:bg-white focus:ring-blue-500 focus:border-blue-500 border">
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-slate-700 mb-1">學校聯絡電話 (SCHOOL_PHONE)</label>
+      <input type="text" id="setting_SCHOOL_PHONE"
+        class="w-full rounded border-slate-300 p-2 text-sm bg-slate-50 focus:bg-white focus:ring-blue-500 focus:border-blue-500 border">
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-slate-700 mb-1">學校地址 (SCHOOL_ADDRESS)</label>
+      <input type="text" id="setting_SCHOOL_ADDRESS"
+        class="w-full rounded border-slate-300 p-2 text-sm bg-slate-50 focus:bg-white focus:ring-blue-500 focus:border-blue-500 border">
+    </div>
+
+    <div class="md:col-span-2">
+      <label class="block text-sm font-medium text-slate-700 mb-1">系統說明文字 (SYSTEM_DESC)</label>
+      <textarea id="setting_SYSTEM_DESC" rows="3"
+        class="w-full rounded border-slate-300 p-2 text-sm bg-slate-50 focus:bg-white focus:ring-blue-500 focus:border-blue-500 border"></textarea>
+    </div>
+
+    <div class="md:col-span-2">
+      <label class="block text-sm font-medium text-slate-700 mb-1">Logo 圖片 ID (LOGO_ID) <span
+          class="text-xs text-slate-500 font-normal ml-2">Google Drive 檔案 ID，建議長寬比 3:1 以內</span></label>
+      <div class="flex flex-col sm:flex-row gap-4 items-start">
+        <div id="logo-preview-container"
+          class="hidden w-full sm:w-48 h-20 border rounded bg-slate-100 flex items-center justify-center overflow-hidden shrink-0 shadow-sm">
+          <img id="logo-preview-img" class="object-contain h-full w-full">
+        </div>
+        <div class="flex-1 w-full space-y-2 relative">
+          <input type="text" id="setting_LOGO_ID"
+            class="w-full rounded border-slate-300 p-2 text-sm bg-slate-50 focus:bg-white focus:ring-blue-500 focus:border-blue-500 border mb-2">
+
+          <div id="logo-upload-zone" tabindex="0"
+            class="border-2 border-dashed border-slate-300 rounded-lg p-4 text-center cursor-pointer hover:bg-slate-50 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+            <input type="file" id="logo-file-input" class="hidden" accept="image/*">
+            <i class="fa-solid fa-cloud-arrow-up text-3xl text-slate-400 mb-2"></i>
+            <p class="text-sm text-slate-600">點擊上傳、拖曳圖片至此，或直接 <kbd
+                class="px-1.5 py-0.5 rounded border bg-slate-100 font-mono text-xs shadow-sm">Ctrl+V</kbd> 貼上</p>
+            <p id="logo-upload-status" class="text-xs text-blue-600 mt-2 font-medium hidden"><i
+                class="fa-solid fa-circle-notch fa-spin mr-1"></i> 上傳中，請稍候...</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 權限與資料儲存 -->
+    <div class="space-y-4 md:col-span-2">
+      <div class="flex justify-between items-center border-b pb-2">
+        <h3 class="font-semibold text-slate-800">系統底層參數警告</h3>
+        <button type="button" onclick="handleAdvancedSettingsSubmit()" id="btn-save-adv-settings"
+          class="px-3 py-1.5 bg-rose-600 text-white rounded border border-rose-600 hover:bg-rose-700 text-sm font-medium transition shadow-sm">
+          儲存進階參數
+        </button>
+      </div>
+    </div>
+    <div
+      class="md:col-span-2 bg-rose-50 border border-rose-200 text-rose-800 p-4 rounded-lg text-sm leading-relaxed shadow-sm">
+      <h4 class="font-bold text-rose-900 mb-2 flex items-center">
+        <svg class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        </svg>
+        系統底層參數警告
+      </h4>
+      <p>修改下方的參數會直接影響整個系統的運作。如果您更改了 <strong>SPREADSHEET_ID</strong>、<strong>WEB_APP_URL</strong> 或
+        <strong>CLIENT_SECRET</strong> 等關鍵變數，系統可能無法正常連線或授權登入。請在充分了解欄位用途後再進行修改。
+      </p>
+    </div>
+    <div class="space-y-4 md:col-span-2">
+      <h3 class="font-semibold text-slate-800 border-b pb-2">權限與資料庫參數</h3>
+    </div>
+    <div class="md:col-span-2">
+      <label class="block text-sm font-medium text-slate-700 mb-1">管理員信箱 (ADMIN_EMAILS) <span
+          class="text-xs text-slate-500 font-normal ml-2">以半形逗號分隔多個信箱</span></label>
+      <input type="text" id="setting_ADMIN_EMAILS"
+        class="w-full rounded border-slate-300 p-2 text-sm bg-slate-50 focus:bg-white focus:ring-blue-500 focus:border-blue-500 border">
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-slate-700 mb-1">允許登入的組織網域 (ALLOWED_DOMAIN)</label>
+      <input type="text" id="setting_ALLOWED_DOMAIN"
+        class="w-full rounded border-slate-300 p-2 text-sm bg-slate-50 focus:bg-white focus:ring-blue-500 focus:border-blue-500 border"
+        placeholder="例如: fhsh.khc.edu.tw">
+    </div>
+    <div>
+      <label class="block text-sm font-medium text-slate-700 mb-1">上傳圖片資料夾 ID (FOLDER_ID) <span
+          class="text-red-500">*</span></label>
+      <input type="text" id="setting_FOLDER_ID"
+        class="w-full rounded border-slate-300 p-2 text-sm bg-slate-50 focus:bg-white focus:ring-blue-500 focus:border-blue-500 border">
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-slate-700 mb-1">藥品/物品請購 試算表 ID (SPREADSHEET_ID) <span
+          class="text-red-500">*</span></label>
+      <input type="text" id="setting_SPREADSHEET_ID"
+        class="w-full rounded border-slate-300 p-2 text-sm bg-slate-50 focus:bg-white focus:ring-blue-500 focus:border-blue-500 border">
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-slate-700 mb-1">設備申請 試算表 ID (EQUIP_SHEET_ID) <span
+          class="text-red-500">*</span></label>
+      <input type="text" id="setting_EQUIP_SHEET_ID"
+        class="w-full rounded border-slate-300 p-2 text-sm bg-slate-50 focus:bg-white focus:ring-blue-500 focus:border-blue-500 border">
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-slate-700 mb-1">設備借用 試算表 ID (EQUIP_BORROW_SHEET_ID) <span
+          class="text-red-500">*</span></label>
+      <input type="text" id="setting_EQUIP_BORROW_SHEET_ID"
+        class="w-full rounded border-slate-300 p-2 text-sm bg-slate-50 focus:bg-white focus:ring-blue-500 focus:border-blue-500 border">
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-slate-700 mb-1">實驗室預約 試算表 ID (LAB_SPREADSHEET_ID) <span
+          class="text-red-500">*</span></label>
+      <input type="text" id="setting_LAB_SPREADSHEET_ID"
+        class="w-full rounded border-slate-300 p-2 text-sm bg-slate-50 focus:bg-white focus:ring-blue-500 focus:border-blue-500 border">
+    </div>
+
+
+    <!-- 系統整合 URL 與金鑰 -->
+    <div class="space-y-4 md:col-span-2 mt-4">
+      <h3 class="font-semibold text-slate-800 border-b pb-2">系統端點與金鑰 (危險區)</h3>
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-slate-700 mb-1">網頁應用程式 URL (WEB_APP_URL) <span
+          class="text-red-500">*</span></label>
+      <input type="text" id="setting_WEB_APP_URL"
+        class="w-full rounded border-slate-300 p-2 text-sm bg-slate-50 focus:bg-white focus:ring-blue-500 focus:border-blue-500 border font-mono">
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-slate-700 mb-1">後台短網址 (ADMIN_BACKEND_URL)</label>
+      <input type="text" id="setting_ADMIN_BACKEND_URL"
+        class="w-full rounded border-slate-300 p-2 text-sm bg-slate-50 focus:bg-white focus:ring-blue-500 focus:border-blue-500 border font-mono">
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-slate-700 mb-1">GCP Client ID (CLIENT_ID)</label>
+      <input type="text" id="setting_CLIENT_ID"
+        class="w-full rounded border-slate-300 p-2 text-sm bg-slate-50 focus:bg-white focus:ring-blue-500 focus:border-blue-500 border font-mono">
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-slate-700 mb-1">GCP Client Secret (CLIENT_SECRET)</label>
+      <input type="password" id="setting_CLIENT_SECRET"
+        class="w-full rounded border-slate-300 p-2 text-sm bg-slate-50 focus:bg-white focus:ring-blue-500 focus:border-blue-500 border font-mono">
+    </div>
+
+  </form>
+</div>
