@@ -23,30 +23,30 @@ GAS 官方規定：若將部署設定為**「執行身分：我 (開發者)」**
 
 ```mermaid
 graph TD
-    Client[🖥️ 前端網頁介面 SPA<br>Index.html + Tailwind CSS]
+    Client["🖥️ 前端網頁介面 SPA<br>(Index.html + Tailwind CSS)"]
     
-    subgraph Google Apps Script 後端 (Code.js)
-        GAS[⚙️ API 路由與核心邏輯<br>doGet / processOAuthCallback]
-        Cache[(💾 CacheService<br>暫存 Session Token 30分鐘)]
+    subgraph Backend ["Google Apps Script 後端 (Code.js)"]
+        GAS["⚙️ API 路由與核心邏輯<br>(doGet / processOAuthCallback)"]
+        Cache[("💾 CacheService<br>(暫存 Session Token 30分鐘)")]
     end
     
-    subgraph Google 雲端服務群
-        OAuth[🔑 Google OAuth 2.0<br>GCP 授權中心]
-        Sheets[(📊 Google 試算表資料庫<br>四大子系統獨立 Sheet)]
-        Drive[(📁 Google 雲端硬碟<br>圖片儲存與縮圖快取)]
-        Mail[✉️ Gmail API<br>新申請審核通知信]
+    subgraph CloudServices ["Google 雲端服務群"]
+        OAuth["🔑 Google OAuth 2.0<br>(GCP 授權中心)"]
+        Sheets[("📊 Google 試算表資料庫<br>(四大子系統獨立 Sheet)")]
+        Drive[("📁 Google 雲端硬碟<br>(圖片儲存與縮圖快取)")]
+        Mail["✉️ Gmail API<br>(新申請審核通知信)"]
     end
 
-    Client -- 1. 點擊登入 (開啟彈窗) --> OAuth
-    OAuth -- 2. 使用者同意授權後回傳 code --> GAS
-    GAS -- 3. 以 code 交換 Access Token & UserInfo --> OAuth
-    GAS -- 4. 產生 Session Token 並綁定個資 --> Cache
-    GAS -- 5. postMessage 傳遞 Token 至主視窗 --> Client
+    Client -->|"1. 點擊登入 (開啟彈窗)"| OAuth
+    OAuth -->|"2. 使用者同意授權後回傳 code"| GAS
+    GAS -->|"3. 以 code 交換 Access Token 與 UserInfo"| OAuth
+    GAS -->|"4. 產生 Session Token 並綁定個資"| Cache
+    GAS -->|"5. postMessage 傳遞 Token 至主視窗"| Client
     
-    Client -- 6. 攜帶 Session Token 呼叫 API --> GAS
-    GAS -- 讀寫 4 大子系統資料 --> Sheets
-    GAS -- 儲存 Base64 照片 --> Drive
-    GAS -- 發送 Email 通知 --> Mail
+    Client -->|"6. 攜帶 Session Token 呼叫 API"| GAS
+    GAS -->|"讀寫 4 大子系統資料"| Sheets
+    GAS -->|"儲存 Base64 照片"| Drive
+    GAS -->|"發送 Email 通知"| Mail
 ```
 
 ---
@@ -56,11 +56,11 @@ graph TD
 ```mermaid
 sequenceDiagram
     autonumber
-    participant U as 👤 使用者 (Browser SPA)
-    participant P as 🪟 OAuth 彈出視窗 (Popup)
-    participant G as 🔑 Google OAuth 2.0 授權端點
-    participant GAS as ⚙️ 後端 API (Code.js)
-    participant C as 💾 快取 (CacheService)
+    actor U as 使用者 (Browser SPA)
+    participant P as OAuth 彈窗 (Popup)
+    participant G as Google 授權中心 (GCP)
+    participant GAS as 後端 API (Code.js)
+    participant C as 快取 (CacheService)
 
     U->>P: 點擊「登入」開啟授權彈出視窗 (js-auth.html)
     P->>G: 導向 Google 登入與授權頁面 (getLoginUrl)
