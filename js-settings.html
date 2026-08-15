@@ -1,0 +1,173 @@
+<script>
+  // ==========================================
+  // js-settings.html — 系統設定與 Logo 上傳
+  // 職責：讀取與儲存基礎設定及進階參數、Logo 拖拉上傳
+  // ==========================================
+
+  let isSettingsLoaded = false;
+
+  // 系統設定管理邏輯
+  async function loadSystemSettings(force = false) {
+    if (isSettingsLoaded && !force) return;
+
+    const btnBase = document.getElementById('btn-save-base-settings');
+    const btnAdv = document.getElementById('btn-save-adv-settings');
+
+    if (btnBase) { btnBase.innerText = '載入中...'; btnBase.disabled = true; }
+    if (btnAdv) { btnAdv.innerText = '載入中...'; btnAdv.disabled = true; }
+
+    try {
+      const response = await ApiService.settings.getSettings(getToken());
+      
+      if (btnBase) { btnBase.innerText = '儲存基礎設定'; btnBase.disabled = false; }
+      if (btnAdv) { btnAdv.innerText = '儲存進階參數'; btnAdv.disabled = false; }
+      
+      if (response.success && response.data) {
+        isSettingsLoaded = true;
+        const props = response.data;
+        for (const key in props) {
+          const el = document.getElementById('setting_' + key);
+          if (el) {
+            el.value = props[key];
+            if (key === 'LOGO_ID' && typeof showLogoPreview === 'function') showLogoPreview(props[key]);
+          }
+        }
+      } else {
+        alert('載入設定失敗：' + (response.message || '未知錯誤'));
+      }
+    } catch (err) {
+      if (btnBase) { btnBase.innerText = '儲存基礎設定'; btnBase.disabled = false; }
+      if (btnAdv) { btnAdv.innerText = '儲存進階參數'; btnAdv.disabled = false; }
+      alert('連線失敗：' + (err.message || err));
+    }
+  }
+
+  async function _saveSettings(keys, btnId) {
+    const settingsObj = {};
+    keys.forEach(key => {
+      const el = document.getElementById('setting_' + key);
+      if (el) settingsObj[key] = el.value.trim();
+    });
+
+    const btnSave = document.getElementById(btnId);
+    if (!btnSave) return;
+    const originalText = btnSave.innerText;
+    btnSave.innerText = '儲存中...'; btnSave.disabled = true;
+
+    try {
+      const response = await ApiService.settings.updateConfig(settingsObj, getToken());
+      
+      btnSave.innerText = originalText; btnSave.disabled = false;
+      if (response.success) {
+        alert(response.message);
+        window.top.location.reload();
+      } else {
+        alert('儲存失敗：' + (response.message || '未知錯誤'));
+      }
+    } catch (err) {
+      btnSave.innerText = originalText; btnSave.disabled = false;
+      alert('連線失敗：' + (err.message || err));
+    }
+  }
+
+  window.handleBaseSettingsSubmit = async function() {
+    const isConfirmed = await showConfirm('確定要儲存基礎設定嗎？');
+    if (!isConfirmed) return;
+    await _saveSettings(['SYSTEM_TITLE', 'SCHOOL_NAME', 'SCHOOL_PHONE', 'SCHOOL_ADDRESS', 'SYSTEM_DESC', 'LOGO_ID'], 'btn-save-base-settings');
+  };
+
+  window.handleAdvancedSettingsSubmit = async function() {
+    const isConfirmed1 = await showConfirm('確定要儲存進階系統參數嗎？\n請注意，修改這些參數可能導致系統暫時無法運作。');
+    if (!isConfirmed1) return;
+    const isConfirmed2 = await showConfirm('【再次確認】\n您即將修改 SPREADSHEET_ID 等核心變數。\n若設定錯誤將導致系統完全無法登入或存取資料，確定要繼續修改嗎？');
+    if (!isConfirmed2) return;
+    await _saveSettings(['ADMIN_EMAILS', 'ALLOWED_DOMAIN', 'SPREADSHEET_ID', 'EQUIP_SHEET_ID', 'EQUIP_BORROW_SHEET_ID', 'LAB_SPREADSHEET_ID', 'FOLDER_ID', 'WEB_APP_URL', 'ADMIN_BACKEND_URL', 'CLIENT_ID', 'CLIENT_SECRET'], 'btn-save-adv-settings');
+  };
+
+  // Logo 上傳邏輯
+  function showLogoPreview(fileId) {
+    const previewContainer = document.getElementById('logo-preview-container');
+    const previewImg = document.getElementById('logo-preview-img');
+    if (!previewContainer || !previewImg) return;
+    if (!fileId) { previewContainer.classList.add('hidden'); return; }
+    // 使用單引號字串拼接，避免 GAS 的 HTML 壓縮器將反引號內的 // 誤認為註解而截斷程式碼
+    previewImg.src = 'https://drive.google.com/thumbnail?id=' + fileId + '&sz=w300';
+    previewContainer.classList.remove('hidden');
+  }
+
+  function handleLogoUpload(file) {
+    if (!file || !file.type.startsWith('image/')) { alert('請上傳圖片檔案'); return; }
+    const uploadZone = document.getElementById('logo-upload-zone');
+    const statusMsg = document.getElementById('logo-upload-status');
+    const settingLogoId = document.getElementById('setting_LOGO_ID');
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const dataUrl = e.target.result;
+      const splitData = dataUrl.split(',');
+      const contentType = splitData[0].split(':')[1].split(';')[0];
+      const base64Data = splitData[1];
+
+      const previewContainer = document.getElementById('logo-preview-container');
+      const previewImg = document.getElementById('logo-preview-img');
+      if (previewImg && previewContainer) { previewImg.src = dataUrl; previewContainer.classList.remove('hidden'); }
+
+      if (statusMsg) statusMsg.classList.remove('hidden');
+      if (uploadZone) { uploadZone.style.pointerEvents = 'none'; uploadZone.classList.add('opacity-70'); }
+
+      try {
+        const res = await ApiService.settings.uploadLogo(base64Data, contentType, file.name || 'logo.png', getToken());
+        
+        if (statusMsg) statusMsg.classList.add('hidden');
+        if (uploadZone) { uploadZone.style.pointerEvents = 'auto'; uploadZone.classList.remove('opacity-70'); }
+        
+        if (res.success) {
+          if (settingLogoId) settingLogoId.value = res.fileId;
+          showLogoPreview(res.fileId);
+        } else {
+          alert('Logo 上傳失敗：' + (res.message || '未知錯誤'));
+        }
+      } catch (err) {
+        if (statusMsg) statusMsg.classList.add('hidden');
+        if (uploadZone) { uploadZone.style.pointerEvents = 'auto'; uploadZone.classList.remove('opacity-70'); }
+        alert('Logo 上傳發生錯誤：' + (err.message || err));
+      }
+    };
+    reader.readAsDataURL(file);
+  }
+
+  // 綁定 Logo 上傳區塊事件
+  function initAdminEvents() {
+    const logoUploadZone = document.getElementById('logo-upload-zone');
+    const logoFileInput = document.getElementById('logo-file-input');
+    const settingLogoIdInput = document.getElementById('setting_LOGO_ID');
+
+    if (logoUploadZone && logoFileInput) {
+      logoUploadZone.addEventListener('click', () => logoFileInput.click());
+      logoFileInput.addEventListener('change', (e) => { if (e.target.files && e.target.files[0]) handleLogoUpload(e.target.files[0]); });
+      logoUploadZone.addEventListener('dragover', (e) => { e.preventDefault(); logoUploadZone.classList.add('border-blue-400', 'bg-blue-50'); });
+      ['dragleave', 'dragend'].forEach(type => {
+        logoUploadZone.addEventListener(type, () => logoUploadZone.classList.remove('border-blue-400', 'bg-blue-50'));
+      });
+      logoUploadZone.addEventListener('drop', (e) => {
+        e.preventDefault(); logoUploadZone.classList.remove('border-blue-400', 'bg-blue-50');
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) handleLogoUpload(e.dataTransfer.files[0]);
+      });
+      logoUploadZone.addEventListener('paste', (e) => {
+        const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+        for (let item of items) {
+          if (item.type.indexOf('image') === 0) { handleLogoUpload(item.getAsFile()); break; }
+        }
+      });
+    }
+
+    if (settingLogoIdInput) {
+      settingLogoIdInput.addEventListener('input', () => showLogoPreview(settingLogoIdInput.value));
+    }
+  }
+
+  // 初始化設定事件
+  document.addEventListener("DOMContentLoaded", () => {
+    initAdminEvents();
+  });
+</script>

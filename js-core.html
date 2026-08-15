@@ -66,18 +66,15 @@
     });
   }
 
-  // 全域權限狀態 - 使用 var 宣告使其順利掛載於 window 物件供各子模組共用與取用
-  var currentUserEmail = '';
-  var currentUserDisplayName = '';
-  window.currentUserEmail = '';
-  window.currentUserDisplayName = '';
-
-  // 全域頁面狀態
-  let currentSystemTab = 'equipBorrow';
-  let currentActionView = 'apply';
-
-  // 功能旗標：第二階段先預設關閉 tooltip，可快速回滾
-  window.APP_FEATURES = Object.assign({ tooltip: false }, window.APP_FEATURES || {});
+  // 全域系統共用狀態 (AppState) 封裝
+  var AppState = {
+    currentUserEmail: '',
+    currentUserDisplayName: '',
+    currentSystemTab: 'equipBorrow',
+    currentActionView: 'apply',
+    features: Object.assign({ tooltip: false }, window.APP_FEATURES || {})
+  };
+  window.AppState = AppState;
 
   // 初始化 DOM 快取並設置初始未登入狀態
   initDOM();
@@ -91,6 +88,36 @@
         [functionName](...args);
     });
   };
+
+  // 統一 API 服務層 (API Service Layer)
+  var ApiService = {
+    auth: {
+      getStatus: (token) => window.callGas('getAuthStatus', token),
+      logout: (token) => window.callGas('logoutOAuth', token),
+      getLoginUrl: () => window.callGas('getLoginUrl')
+    },
+    form: {
+      submitChem: (data, token) => window.callGas('submitApplication', data, token),
+      submitEquip: (data, token) => window.callGas('submitEquipApplication', data, token),
+      submitEquipBorrow: (data, token) => window.callGas('submitEquipBorrowApplication', data, token),
+      batchSubmitChem: (data, token) => window.callGas('batchSubmitApplication', data, token)
+    },
+    admin: {
+      updateStatus: (row, status, price, token, sys) => window.callGas('updateProcurementStatus', row, status, price, token, sys),
+      batchUpdateStatus: (updates, token, sys) => window.callGas('batchUpdateProcurementStatus', updates, token, sys),
+      deleteRequests: (rows, token, sys) => window.callGas('deleteUserRequests', rows, token, sys)
+    },
+    lab: {
+      submitBooking: (data, token) => window.callGas('submitLabBooking', data, token),
+      cancelBooking: (row, token, series) => window.callGas('cancelLabBooking', row, token, series)
+    },
+    settings: {
+      getSettings: (token) => window.callGas('getSystemSettings', token),
+      updateConfig: (config, token) => window.callGas('saveSystemSettings', config, token),
+      uploadLogo: (base64, mimeType, filename, token) => window.callGas('uploadLogoImage', base64, mimeType, filename, token)
+    }
+  };
+  window.ApiService = ApiService;
 
   // 全域快取與靜默更新管理器 (Stale-While-Revalidate)
   window.SystemCache = {
@@ -155,6 +182,7 @@
     // 使快取過期 (例如表單送出後，強制下次更新)
     invalidate: function(key) {
       this.lastFetch[key] = 0;
+      delete this.data[key]; // 強制清除記憶體舊資料，以利畫面顯示「載入中」
     }
   };
 </script>

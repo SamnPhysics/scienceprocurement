@@ -3,7 +3,8 @@
 
 <head>
   <base target="_top">
-  <script src="https://cdn.tailwindcss.com"></script>
+  <?!= include('Stylesheet'); ?>
+  <!-- <script src="https://cdn.tailwindcss.com"></script> -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <style>
@@ -301,16 +302,19 @@
   <?!= include('js-config'); ?>
 
   <!-- Layer 2: UI 元件（PageNav、DataTableManager、自訂 Alert/Confirm） -->
+  <?!= include('js-ui-utility'); ?>
   <?!= include('js-ui-widgets'); ?>
 
   <!-- Layer 3: 認證與路由（登入登出、setupUI、switchView、switchApplyForm） -->
   <?!= include('js-auth'); ?>
+  <?!= include('js-switch'); ?>
 
   <!-- Layer 4: 申請表單（藥品/設備/借用 三大表單提交、圖片上傳） -->
   <?!= include('js-forms'); ?>
 
   <!-- Layer 5: 管理功能（清單渲染、批次更新、匯出、系統設定、Logo 上傳） -->
   <?!= include('js-admin'); ?>
+  <?!= include('js-settings'); ?>
 
   <!-- Layer 6: 實驗室預約 - 核心資料與工具（常數、狀態、日期工具、視圖切換） -->
   <?!= include('js-lab-core'); ?>

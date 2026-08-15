@@ -29,12 +29,7 @@
   function buildCheckboxTd(rowNumber) {
     return buildTd(`<input type="checkbox" class="user-row-checkbox rounded border-slate-300 text-blue-600 focus:ring-blue-500" value="${rowNumber}">`, "p-3 text-center");
   }
-  function buildPhotoTd(photoUrl) {
-    if (photoUrl && photoUrl !== '無照片') {
-      return buildTd(`<img src="${getDriveImageUrl(photoUrl, 100)}" alt="圖片" class="w-10 h-10 object-cover mx-auto rounded cursor-pointer border border-slate-200 hover:opacity-80 transition" referrerpolicy="no-referrer" onclick="openImageModal('${photoUrl}')">`, "p-3 text-center");
-    }
-    return buildTd('<span class="text-slate-400 text-xs">無</span>', "p-3 text-center");
-  }
+
   function buildStatusSelectTd(system, currentStatus, rowNumber) {
     const options = STATUS_OPTIONS[system] || STATUS_OPTIONS.chem;
     const optionsHtml = options.map(opt =>
@@ -111,7 +106,6 @@
       'user-list': [
         { header: '借用人', thClass: 'p-3', render: (item) => buildTd(`<span class="font-medium text-slate-900">${item.applicant || ''}</span>`) },
         { header: '借用物品', thClass: 'p-3', render: (item) => buildTd(`<span class="font-medium text-slate-900">${item.chineseName || ''}</span>`) },
-        { header: '圖片', thClass: 'p-3 text-center', render: (item) => buildPhotoTd(item.photoUrl) },
         { header: '是否歸還', thClass: 'p-3 text-center', render: (item) => buildTd(getStatusBadge(item.status), "p-3 text-center") }
       ],
       'admin': [
@@ -132,7 +126,6 @@
         { header: '時間戳記', thClass: 'p-3', render: (item) => buildTd(`<span class="text-xs whitespace-nowrap">${formatDateOnly(item.timestamp)}</span>`) },
         { header: '申請科別', thClass: 'p-3', render: (item) => buildTd(`<span class="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700 whitespace-nowrap">${item.subject || ''}</span>`) },
         { header: '設備名稱/軟體名稱', thClass: 'p-3', render: (item) => buildTd(`<span class="font-medium text-slate-900">${item.chineseName || ''}</span>`) },
-        { header: '圖片', thClass: 'p-3 text-center', render: (item) => buildPhotoTd(item.photoUrl) },
         { header: '數量', thClass: 'p-3 w-16 text-center', render: (item) => buildTd(`<span class="font-semibold text-slate-800">${item.quantity || ''}</span>`, "p-3 text-center") },
         { header: '自估單價', thClass: 'p-3 text-center w-28', render: (item) => buildTd(`<span class="text-rose-600 font-medium">${item.price ? item.price + ' 元' : '無'}</span>`, "p-3 text-center") },
         { header: '是否購入', thClass: 'p-3 text-center', render: (item) => buildTd(getStatusBadge(item.status), "p-3 text-center") }
@@ -155,7 +148,6 @@
         { header: '時間戳記', thClass: 'p-3', render: (item) => buildTd(`<span class="text-xs whitespace-nowrap">${formatDateOnly(item.timestamp)}</span>`) },
         { header: '科別', thClass: 'p-3', render: (item) => buildTd(`<span class="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700 whitespace-nowrap">${item.subject || ''}</span>`) },
         { header: '名稱', thClass: 'p-3', render: (item) => buildTd(`<span class="font-medium text-slate-900">${item.chineseName || ''}</span>`) },
-        { header: '圖片', thClass: 'p-3 text-center', render: (item) => buildPhotoTd(item.photoUrl) },
         { header: '所需數量', thClass: 'p-3 w-16 text-center', render: (item) => buildTd(`<span class="font-semibold text-slate-800">${item.quantity || ''}</span>`, "p-3 text-center") },
         { header: '分類/狀態', thClass: 'p-3 text-center', render: (item) => buildTd(`<span class="text-xs whitespace-nowrap">${item.category || ''}</span>`, "p-3 text-center") },
         { header: '是否請購', thClass: 'p-3 text-center', render: (item) => buildTd(getStatusBadge(item.status), "p-3 text-center") },
@@ -166,7 +158,6 @@
         { header: '時間戳記', thClass: 'p-3', render: (item) => buildTd(`<span class="text-xs whitespace-nowrap">${formatDateOnly(item.timestamp)}</span>`) },
         { header: '科別', thClass: 'p-3', render: (item) => buildTd(`<span class="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700 whitespace-nowrap">${item.subject || ''}</span>`) },
         { header: '名稱', thClass: 'p-3', render: (item) => buildTd(`<span class="font-medium text-slate-900 min-w-[100px]">${item.chineseName || ''}</span>`) },
-        { header: '圖片', thClass: 'p-3 text-center', render: (item) => buildPhotoTd(item.photoUrl) },
         { header: '所需數量', thClass: 'p-3 w-16 text-center', render: (item) => buildTd(`<span class="font-semibold text-slate-800 min-w-[80px]">${item.quantity || ''}</span>`, "p-3 text-center") },
         { header: '分類/狀態', thClass: 'p-3 text-center', render: (item) => buildTd(`<span class="text-xs min-w-[100px]">${item.category || ''}</span>`, "p-3 text-center") },
         { header: '申請人', thClass: 'p-3', render: (item) => buildTd(`<span class="text-xs whitespace-nowrap">${item.applicant || ''}</span>`) },
@@ -193,7 +184,6 @@
         { label: '請勾選所需科別', value: item => item.subject || '' },
         { label: '申請人', value: item => item.applicant || '' },
         { label: '電子郵件地址', value: item => item.email || '' },
-        { label: '物品/藥品照片', value: item => item.photoUrl || '無照片' },
         { label: '藥品容量(液態)', value: item => item.volume || '無' },
         { label: '是否請購', value: item => item.status || '未請購' },
         { label: '備註', value: item => item.remark || '' },
@@ -212,8 +202,7 @@
         { label: '借用說明', value: item => item.purpose || '' },
         { label: '是否歸還', value: item => item.status || '未歸還' },
         { label: '備註', value: item => item.remark || '' },
-        { label: '電子郵件', value: item => item.email || '' },
-        { label: '照片', value: item => item.photoUrl || '無照片' }
+        { label: '電子郵件', value: item => item.email || '' }
       ]
     },
     equip: {

@@ -6,27 +6,28 @@
   // 載入順序：依賴 js-core.html
   // ==========================================
 
-  // 時間軸範圍常數 (08:00 - 18:00)
-  const LAB_START_HOUR = 8;
-  const LAB_END_HOUR = 18;
-  const LAB_TOTAL_HOURS = LAB_END_HOUR - LAB_START_HOUR;
-  const LAB_TOTAL_MINUTES = LAB_TOTAL_HOURS * 60;
-
-  // 後端資料狀態（初始化為空）
-  let labRooms = [];
-  let labBookings = [];
-  let labWeeklyBookings = {};
-  let labPeriodsData = [];
-
-  // 目前視圖與日期狀態
-  let labCurrentView = 'day';
-  let labCurrentDate = new Date();
+  // 實驗室模組狀態 (LabState) 封裝
+  var LabState = {
+    config: {
+      startHour: 8,
+      endHour: 18,
+      get totalHours() { return this.endHour - this.startHour; },
+      get totalMinutes() { return this.totalHours * 60; }
+    },
+    rooms: [],
+    bookings: [],
+    weeklyBookings: {},
+    periodsData: [],
+    currentView: 'day',
+    currentDate: new Date()
+  };
+  window.LabState = LabState;
 
   // ========== 工具函數 ==========
 
   // 姓名隱私遮蔽（未登入：趙臨軒→趙O軒；單名→最後一字；登入後顯示全名）
   function maskName(name) {
-    if (currentUserEmail && currentUserEmail.trim() !== '') return name || '';
+    if (AppState.currentUserEmail && AppState.currentUserEmail.trim() !== '') return name || '';
     if (!name || String(name).trim() === '') return '無';
     const str = String(name).trim();
     if (str === '無') return str;
@@ -48,9 +49,9 @@
   // 判斷預約是否屬於目前登入帳號（用於顯示綠色「您的預約」樣式）
   function isMyBooking(booking) {
     if (!booking) return false;
-    const email = (typeof currentUserEmail !== 'undefined' ? currentUserEmail : (window.currentUserEmail || '')).toLowerCase().trim();
+    const email = (typeof AppState.currentUserEmail !== 'undefined' ? AppState.currentUserEmail : (AppState.currentUserEmail || '')).toLowerCase().trim();
     if (!email) return false;
-    const displayName = (typeof currentUserDisplayName !== 'undefined' ? currentUserDisplayName : (window.currentUserDisplayName || (email ? email.split('@')[0] : ''))).toLowerCase().trim();
+    const displayName = (typeof AppState.currentUserDisplayName !== 'undefined' ? AppState.currentUserDisplayName : (AppState.currentUserDisplayName || (email ? email.split('@')[0] : ''))).toLowerCase().trim();
     const bEmail = String(booking.email || '').toLowerCase().trim();
     const bTeacher = String(booking.teacher || '').toLowerCase().trim();
     const bStudent = String(booking.student || '').toLowerCase().trim();
@@ -82,10 +83,10 @@
   function calculateLabTimePosition(startStr, endStr) {
     const [startH, startM] = startStr.split(':').map(Number);
     const [endH, endM] = endStr.split(':').map(Number);
-    const startMinutesFromBase = (startH - LAB_START_HOUR) * 60 + startM;
+    const startMinutesFromBase = (startH - LabState.config.startHour) * 60 + startM;
     const durationMinutes = ((endH - startH) * 60) + (endM - startM);
-    const leftPercent = (startMinutesFromBase / LAB_TOTAL_MINUTES) * 100;
-    const widthPercent = (durationMinutes / LAB_TOTAL_MINUTES) * 100;
+    const leftPercent = (startMinutesFromBase / LabState.config.totalMinutes) * 100;
+    const widthPercent = (durationMinutes / LabState.config.totalMinutes) * 100;
     return { left: Math.max(0, leftPercent), width: Math.min(100 - leftPercent, widthPercent) };
   }
 
@@ -110,7 +111,7 @@
     const keyword = searchInput ? searchInput.value.trim().toLowerCase() : '';
     const selectedBuilding = buildingSelect ? buildingSelect.value.trim() : '';
 
-    return labRooms.filter(room => {
+    return LabState.rooms.filter(room => {
       const roomLoc = String(room.location || '').trim();
       const passBuilding = !selectedBuilding || roomLoc === selectedBuilding;
       const passKeyword = !keyword || (
@@ -135,7 +136,7 @@
     const defaultOpt = document.createElement('option');
     defaultOpt.value = ''; defaultOpt.textContent = '請選擇...';
     roomFrag.appendChild(defaultOpt);
-    labRooms.forEach(r => {
+    LabState.rooms.forEach(r => {
       const opt = document.createElement('option');
       opt.value = r.id;
       opt.textContent = `${r.name} (${r.capacity}人${r.floor ? ' / ' + r.floor : ''})`;
@@ -147,7 +148,7 @@
     const buildingSelect = document.getElementById('lab-building-select');
     if (buildingSelect) {
       const currentVal = buildingSelect.value;
-      const locations = [...new Set(labRooms.map(r => String(r.location || '').trim()).filter(Boolean))];
+      const locations = [...new Set(LabState.rooms.map(r => String(r.location || '').trim()).filter(Boolean))];
 
       const bldgFrag = document.createDocumentFragment();
       const allOpt = document.createElement('option');
@@ -164,9 +165,9 @@
     }
 
     const periodsContainer = document.getElementById('modal-periods');
-    if (periodsContainer && labPeriodsData && labPeriodsData.length > 0) {
+    if (periodsContainer && LabState.periodsData && LabState.periodsData.length > 0) {
       const periodFrag = document.createDocumentFragment();
-      labPeriodsData.forEach(p => {
+      LabState.periodsData.forEach(p => {
         const label = document.createElement('label');
         label.className = 'flex items-center gap-2 text-sm';
         label.innerHTML = `<input type="checkbox" value="${p.name}" data-start="${p.start || ''}" data-end="${p.end || ''}" class="rounded text-indigo-600 focus:ring-indigo-500"> ${p.name}`;
@@ -187,10 +188,10 @@
           return;
         }
         if (response) {
-          labRooms = response.rooms || [];
-          labBookings = response.bookings || [];
-          labWeeklyBookings = response.weeklyBookings || {};
-          labPeriodsData = response.periods || [];
+          LabState.rooms = response.rooms || [];
+          LabState.bookings = response.bookings || [];
+          LabState.weeklyBookings = response.weeklyBookings || {};
+          LabState.periodsData = response.periods || [];
           updateLabFormOptions();
         }
         renderLabContent();
@@ -205,7 +206,7 @@
   // ========== 視圖控制 ==========
 
   function switchLabView(view) {
-    labCurrentView = view;
+    LabState.currentView = view;
     const btnDay = document.getElementById('btn-day-view');
     const btnWeek = document.getElementById('btn-week-view');
 
@@ -236,21 +237,21 @@
   function updateLabDateDisplay(view) {
     const display = document.getElementById('current-date-display');
     const dayNames = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
-    const yyyy = labCurrentDate.getFullYear();
-    const mm = labCurrentDate.getMonth() + 1;
-    const dd = labCurrentDate.getDate();
-    const dayStr = dayNames[labCurrentDate.getDay()];
+    const yyyy = LabState.currentDate.getFullYear();
+    const mm = LabState.currentDate.getMonth() + 1;
+    const dd = LabState.currentDate.getDate();
+    const dayStr = dayNames[LabState.currentDate.getDay()];
 
     if (view === 'day') {
-      const isToday = (getLabLocalIsoDate(labCurrentDate) === getLabLocalIsoDate(new Date()));
+      const isToday = (getLabLocalIsoDate(LabState.currentDate) === getLabLocalIsoDate(new Date()));
       display.innerText = `${yyyy}年${mm}月${dd}日 (${dayStr})${isToday ? " (今日)" : ""}`;
     } else {
-      let dayOfWeek = labCurrentDate.getDay();
+      let dayOfWeek = LabState.currentDate.getDay();
       if (dayOfWeek === 0) dayOfWeek = 7;
-      const monday = new Date(labCurrentDate);
-      monday.setDate(labCurrentDate.getDate() - (dayOfWeek - 1));
-      const friday = new Date(labCurrentDate);
-      friday.setDate(labCurrentDate.getDate() + (5 - dayOfWeek));
+      const monday = new Date(LabState.currentDate);
+      monday.setDate(LabState.currentDate.getDate() - (dayOfWeek - 1));
+      const friday = new Date(LabState.currentDate);
+      friday.setDate(LabState.currentDate.getDate() + (5 - dayOfWeek));
 
       const now = new Date();
       let nowDay = now.getDay();
@@ -285,9 +286,9 @@
   }
 
   function changeLabDate(offset) {
-    const shift = (labCurrentView === 'week') ? offset * 7 : offset;
-    labCurrentDate.setDate(labCurrentDate.getDate() + shift);
-    updateLabDateDisplay(labCurrentView);
+    const shift = (LabState.currentView === 'week') ? offset * 7 : offset;
+    LabState.currentDate.setDate(LabState.currentDate.getDate() + shift);
+    updateLabDateDisplay(LabState.currentView);
     renderLabContent();
   }
 
@@ -296,7 +297,7 @@
     const container = document.getElementById('rooms-container');
     if (!container) return;
     container.innerHTML = '';
-    if (labCurrentView === 'day') {
+    if (LabState.currentView === 'day') {
       renderLabTimeline();
       updateLabCurrentTimeLine();
     } else {
@@ -310,8 +311,8 @@
     if (!line) return;
 
     // 檢查視圖且僅在顯示「今日」時呈獻指示線
-    const isToday = (getLabLocalIsoDate(labCurrentDate) === getLabLocalIsoDate(new Date()));
-    if (labCurrentView !== 'day' || !isToday) {
+    const isToday = (getLabLocalIsoDate(LabState.currentDate) === getLabLocalIsoDate(new Date()));
+    if (LabState.currentView !== 'day' || !isToday) {
       line.classList.add('hidden');
       line.style.display = 'none';
       return;
@@ -321,12 +322,12 @@
     const h = now.getHours();
     const m = now.getMinutes();
 
-    if (h >= LAB_START_HOUR && h < LAB_END_HOUR) {
+    if (h >= LabState.config.startHour && h < LabState.config.endHour) {
       line.classList.remove('hidden');
       line.classList.add('flex');
       line.style.display = 'flex';
-      const minutesFromStart = (h - LAB_START_HOUR) * 60 + m;
-      const ratio = minutesFromStart / LAB_TOTAL_MINUTES;
+      const minutesFromStart = (h - LabState.config.startHour) * 60 + m;
+      const ratio = minutesFromStart / LabState.config.totalMinutes;
       // 扣除左側 176px (w-44) 側邊欄，對右側剩餘的時間軸範圍進行百分比計算
       line.style.left = `calc(176px + (100% - 176px) * ${ratio})`;
     } else {

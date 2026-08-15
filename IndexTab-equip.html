@@ -25,7 +25,7 @@
     </div>
   </details>
 
-  <form id="equipForm" onsubmit="handleEquipFormSubmit(event)" class="space-y-5">
+  <form id="equipForm" onsubmit="handleGenericSubmit(event, 'equip')" class="space-y-5">
     <div>
       <label class="block text-sm font-semibold text-slate-700 mb-1">申請人</label>
       <input type="text" id="equip_applicant" name="applicant" required readonly
@@ -182,7 +182,7 @@
             class="mt-2 px-4 py-1.5 bg-slate-200 hover:bg-slate-300 rounded-md text-sm text-slate-700 font-medium transition">選擇檔案</button>
         </div>
 
-        <div id="equip_preview-container" class="hidden relative inline-block mt-2">
+        <div id="equip_preview-container" class="hidden relative mt-2">
           <img id="equip_image-preview" src="" alt="圖片預覽"
             class="max-h-48 rounded shadow-sm border border-slate-200 object-contain">
           <button type="button" id="equip_btn-remove-image" onclick="removeImage(event, 'equip')"
