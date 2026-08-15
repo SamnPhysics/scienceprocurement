@@ -20,22 +20,50 @@
 
 ### `Code.js` (後端邏輯與 API 服務)
 負責處理所有的後端商業邏輯、Google 服務整合與資料庫（試算表）互動。
-- **OAuth2 驗證 (`processOAuthCallback`)**：處理授權碼交換、讀取 UserInfo 並寫入 `CacheService` (6 小時時效)。
-- **路由分配 (`doGet`)**：負責渲染首頁，或是處理 Google 授權跳轉。
-- **資料庫存取 (`submitApplication`, `getSheetData`, `getAdminData`, `updateProcurementStatus`)**：封裝了寫入表單、撈取歷史資料以及更新審核狀態的方法。
-- **權限控制**：內建管理員清單 (`ADMIN_EMAILS`) 與阻擋名單規則 (`BLOCKED_ACCOUNT_RULES`，如阻擋學生帳號登入)。
-- **通知功能**：結合 `MailApp` 發送申請成功的自動通知信。
+- **認證與授權機制**：
+  - **`processOAuthCallback` / `verifySessionToken` / `getAuthStatus` / `logoutOAuth`**：處理 OAuth2 授權碼交換、生成與驗證 `CacheService` 裡的 Session Token (6 小時時效)，並支援登出機制。
+- **路由分配與渲染**：
+  - **`doGet` / `include`**：負責渲染首頁 HTML，載入外部樣板，並處理 Google 授權跳轉邏輯。
+- **表單與資料存取**：
+  - **`submitApplication` / `submitEquipApplication` / `submitEquipBorrowApplication` / `batchSubmitApplication`**：根據不同表單需求封裝寫入試算表的方法，並支援 Excel 批次匯入的多筆提交。
+  - **`getSheetData` / `getAdminData` / `getUserData`**：針對不同權限層級（訪客/管理員/一般使用者）撈取並過濾歷史資料。
+- **管理者與系統設定功能**：
+  - **`updateProcurementStatus` / `batchUpdateProcurementStatus`**：提供單筆與批次更新採購與審核狀態。
+  - **`deleteUserRequests`**：允許使用者或管理員刪除特定申請紀錄。
+  - **`getSystemSettings` / `saveSystemSettings`**：讀寫 `PropertiesService` 的系統參數（環境變數動態管理）。
+- **實驗室預約系統**：
+  - **`getLabData` / `submitLabBooking` / `cancelLabBooking`**：處理實驗室排程的讀取、預約寫入及單筆/系列取消功能。
+- **檔案處理與整合服務**：
+  - **`uploadLogoImage` / `saveBase64ImageToDrive_`**：處理前端 Base64 圖片上傳至 Google Drive 的邏輯。
+  - **權限控制**：透過 `isAdminUser` 與 `isBlockedUser` 等判斷管理員權限與阻擋黑名單。
 
-### `Index.html` (前端使用者介面 SPA)
-這是一個包含 HTML 結構、Tailwind CSS 樣式及所有 JavaScript 邏輯的單頁式應用程式。
-- **三大視圖切換**：
-  - **申請表單 (`view-apply`)**：提供詳細的採購表單，動態切換欄位（如液態藥品濃度）。
-  - **個人申請紀錄 (`view-user-list`)**：依使用者信箱過濾個人的申請歷史，並提供取消功能。
-  - **管理者後台 (`view-admin`)**：管理員專屬介面，可檢視所有採購單、更改狀態（已請購/不通過）、輸入採購金額並匯出 Excel。
-- **效能優化設計**：
-  - **DOM 快取**：利用 `initDOM()` 預先快取大量 DOM 元素，減少 `document.getElementById` 開銷。
-  - **事件委派 (Event Delegation)**：在資料表中透過父層監聽滑鼠事件來顯示 Tooltip，節省大量記憶體。
-  - **前端路由淨化**：登入跳轉後，運用 `history.replaceState` 自動抹除網址列上的 Token 參數，確保安全。
+### 前端模組化 SPA 架構 (`Index.html`、`IndexComponent*.html`、`IndexTab-*.html` 與 `js-*.html`)
+前端採用 Tailwind CSS 與原生 JavaScript，並拆分為多個模組以利維護：
+
+**1. 主框架與 UI 元件 (`Index*.html`)**
+- **`Index.html`**：負責定義主框架版面、載入外部套件 (Tailwind, SheetJS, FontAwesome) 以及所有子模組。
+- **`IndexComponentDatalist.html`**：共用資料清單 (Datalist) 元件，包含篩選工具列與表格容器。
+- **`IndexComponentLabTemplates.html`**：實驗室預約系統的前端 DOM 渲染用 HTML 樣板 (`<template>`)。
+- **`IndexComponentPrintSchedule.html`**：實驗室週課表 A4 列印專用 HTML 樣板。
+- **`IndexComponentUserMenu.html`**：使用者右上角下拉選單元件 (個人紀錄、管理後台、登出等)。
+
+**2. 各大功能分頁視圖 (`IndexTab-*.html`)**
+- **`IndexTab-chem.html`**：藥品/耗材採購申請表單視圖，包含 Excel 匯入功能。
+- **`IndexTab-equip.html`**：科學/實驗設備需求申請表單視圖。
+- **`IndexTab-equipBorrow.html`**：教學實驗設備借用申請表單視圖。
+- **`IndexTab-lab.html`**：實驗室借用/使用預約表單視圖。
+- **`IndexTab-SystSetting.html`**：系統參數設定分頁視圖 (管理員專用)。
+
+**3. 前端邏輯模組 (`js-*.html`)**
+- **`js-core.html`**：核心工具與全域初始化，包含 Session Token、防抖 (debounce)、DOM 快取與全域變數宣告。
+- **`js-auth.html`**：認證與登入邏輯、畫面路由 (視圖切換)。
+- **`js-config.html`**：系統常數與設定檔 (如下拉選項、表單欄位設定、Excel 匯出設定等)。
+- **`js-ui-widgets.html`**：UI 元件類別 (PageNav 分頁、DataTableManager 資料表管理、共用互動視窗如 alert/confirm 覆寫)。
+- **`js-forms.html`**：共用表單提交邏輯、驗證機制與圖片拖曳上傳處理。
+- **`js-admin.html`**：管理員功能模組 (批次更新狀態、資料匯出、系統設定儲存)。
+- **`js-lab-core.html`**：實驗室預約模組的核心常數、狀態管理與篩選工具。
+- **`js-lab-modal.html`**：實驗室預約模組的對話框 (Modal) 控制 (包含日明細、週課表預覽、預約表單)。
+- **`js-lab-render.html`**：實驗室預約模組的畫面渲染邏輯 (時間軸、列表渲染等)。
 
 ---
 
