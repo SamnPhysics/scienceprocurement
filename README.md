@@ -1,108 +1,206 @@
-# 🧪 自然科課程藥品/物品申請採購管理系統
-(Science Procurement Management System)
+# 🏫 設備組 教學資源服務平台管理系統
+(Equipment Section - Teaching Resources & Procurement Service Platform)
 
-這是一個基於 **Google Apps Script (GAS)** 開發的輕量級網頁應用程式，專為學校（以 `@fhsh.khc.edu.tw` 網域為例）設計。系統提供全前端 SPA 介面，支援教師申請課程所需之藥品與實驗物品，並具備管理者後台審核功能。
-
-## ✨ 核心特色
-
-- **半開放式架構**：首頁開放瀏覽，使用者需登入後方可提交申請或檢視紀錄。
-- **自建 OAuth2 安全登入**：突破 GAS 「執行身分：我」的限制，實作自訂的 Google OAuth2 流程，安全取得使用者信箱並發放 Cache Session Token，兼顧跨域存取與個資安全。
-- **無縫背景預載入 (Background Preloading)**：登入後自動於背景獲取資料表數據，實現分頁「0 秒瞬間切換」的極致流暢體驗。
-- **豐富的前端互動體驗 (Tailwind CSS)**：支援圖片拖曳/貼上上傳、客製化 Modal 對話框、自訂浮動提示視窗 (Tooltip)，並內建防抖 (Debounce) 與即時資料篩選。
-- **高併發安全機制**：後端寫入試算表時使用 `LockService` 避免多人同時提交造成的資料覆蓋衝突。
-- **一鍵匯出 Excel**：管理者後台整合 SheetJS 模組，可依篩選條件一鍵匯出採購清單。
+> 基於 **Google Apps Script (GAS)** 與 **Tailwind CSS** 開發的現代化全方位學校教學資源與採購管理平台。由設備組統籌維運，整合**「教學設備借用」**、**「自然科實驗室預約」**、**「教學設備需求申請」**與**「藥品物品請購」**四大核心子系統，具備完善的 OAuth2 權限分級、高併發鎖定機制、背景預載快取與圖形化系統參數管理。
 
 ---
 
-## 📂 系統架構與檔案說明
+## 🌟 系統特色與核心架構
 
-本專案主要包含兩個核心檔案：
-
-### `Code.js` (後端邏輯與 API 服務)
-負責處理所有的後端商業邏輯、Google 服務整合與資料庫（試算表）互動。
-- **認證與授權機制**：
-  - **`processOAuthCallback` / `verifySessionToken` / `getAuthStatus` / `logoutOAuth`**：處理 OAuth2 授權碼交換、生成與驗證 `CacheService` 裡的 Session Token (6 小時時效)，並支援登出機制。
-- **路由分配與渲染**：
-  - **`doGet` / `include`**：負責渲染首頁 HTML，載入外部樣板，並處理 Google 授權跳轉邏輯。
-- **表單與資料存取**：
-  - **`submitApplication` / `submitEquipApplication` / `submitEquipBorrowApplication` / `batchSubmitApplication`**：根據不同表單需求封裝寫入試算表的方法，並支援 Excel 批次匯入的多筆提交。
-  - **`getSheetData` / `getAdminData` / `getUserData`**：針對不同權限層級（訪客/管理員/一般使用者）撈取並過濾歷史資料。
-- **管理者與系統設定功能**：
-  - **`updateProcurementStatus` / `batchUpdateProcurementStatus`**：提供單筆與批次更新採購與審核狀態。
-  - **`deleteUserRequests`**：允許使用者或管理員刪除特定申請紀錄。
-  - **`getSystemSettings` / `saveSystemSettings`**：讀寫 `PropertiesService` 的系統參數（環境變數動態管理）。
-- **實驗室預約系統**：
-  - **`getLabData` / `submitLabBooking` / `cancelLabBooking`**：處理實驗室排程的讀取、預約寫入及單筆/系列取消功能。
-- **檔案處理與整合服務**：
-  - **`uploadLogoImage` / `saveBase64ImageToDrive_`**：處理前端 Base64 圖片上傳至 Google Drive 的邏輯。
-  - **權限控制**：透過 `isAdminUser` 與 `isBlockedUser` 等判斷管理員權限與阻擋黑名單。
-
-### 前端模組化 SPA 架構 (`Index.html`、`IndexComponent*.html`、`IndexTab-*.html` 與 `js-*.html`)
-前端採用 Tailwind CSS 與原生 JavaScript，並拆分為多個模組以利維護：
-
-**1. 主框架與 UI 元件 (`Index*.html`)**
-- **`Index.html`**：負責定義主框架版面、載入外部套件 (Tailwind, SheetJS, FontAwesome) 以及所有子模組。
-- **`IndexComponentDatalist.html`**：共用資料清單 (Datalist) 元件，包含篩選工具列與表格容器。
-- **`IndexComponentLabTemplates.html`**：實驗室預約系統的前端 DOM 渲染用 HTML 樣板 (`<template>`)。
-- **`IndexComponentPrintSchedule.html`**：實驗室週課表 A4 列印專用 HTML 樣板。
-- **`IndexComponentUserMenu.html`**：使用者右上角下拉選單元件 (個人紀錄、管理後台、登出等)。
-
-**2. 各大功能分頁視圖 (`IndexTab-*.html`)**
-- **`IndexTab-chem.html`**：藥品/耗材採購申請表單視圖，包含 Excel 匯入功能。
-- **`IndexTab-equip.html`**：科學/實驗設備需求申請表單視圖。
-- **`IndexTab-equipBorrow.html`**：教學實驗設備借用申請表單視圖。
-- **`IndexTab-lab.html`**：實驗室借用/使用預約表單視圖。
-- **`IndexTab-SystSetting.html`**：系統參數設定分頁視圖 (管理員專用)。
-
-**3. 前端邏輯模組 (`js-*.html`)**
-- **`js-core.html`**：核心工具與全域初始化，包含 Session Token、防抖 (debounce)、DOM 快取與全域變數宣告。
-- **`js-auth.html`**：認證與登入邏輯、畫面路由 (視圖切換)。
-- **`js-config.html`**：系統常數與設定檔 (如下拉選項、表單欄位設定、Excel 匯出設定等)。
-- **`js-ui-widgets.html`**：UI 元件類別 (PageNav 分頁、DataTableManager 資料表管理、共用互動視窗如 alert/confirm 覆寫)。
-- **`js-forms.html`**：共用表單提交邏輯、驗證機制與圖片拖曳上傳處理。
-- **`js-admin.html`**：管理員功能模組 (批次更新狀態、資料匯出、系統設定儲存)。
-- **`js-lab-core.html`**：實驗室預約模組的核心常數、狀態管理與篩選工具。
-- **`js-lab-modal.html`**：實驗室預約模組的對話框 (Modal) 控制 (包含日明細、週課表預覽、預約表單)。
-- **`js-lab-render.html`**：實驗室預約模組的畫面渲染邏輯 (時間軸、列表渲染等)。
+- **多元業務一站式整合**：整合全校教學與實驗設備借用、自然科實驗室即時預約、年度設備採購需求填報及化學藥品耗材請購，打破各表單分散管理的痛點。
+- **半開放式安全存取 (SPA)**：首頁與實驗室課表開放全校瀏覽（預約姓名具備隱私遮蔽）；使用者需登入學校網域帳號後方可填寫申請或檢視歷史紀錄。
+- **自建 Google OAuth2 授權安全架構**：
+  - 突破 GAS「執行身分：我 (開發者)」無法透過 `Session.getActiveUser()` 獲取使用者 Email 的限制。
+  - 透過彈出視窗 (Popup) 進行 Google OAuth 2.0 授權，完成後以 `postMessage` 傳回亂碼通行證 (Session Token)。
+  - 後端 `CacheService` 綁定使用者身分（時效 30 分鐘，兼顧公用電腦安全性），每次 API 呼叫皆進行嚴格身分與網域檢驗。
+- **多層級身分權限控制 (Role-Based Access Control)**：
+  - 👤 **訪客 (Guest)**：未登入時可查看實驗室課表（顯示隱私遮蔽姓名如「趙O軒」）與申請規則說明，無法送出表單。
+  - 🎓 **學生帳號 (Student)**：系統自動偵測 6 位數學生學號帳號，僅開放「教學實驗設備借用」與「實驗室預約」，限制請購與採購權限。
+  - 👨‍🏫 **一般教師 (User)**：可使用四大申請表單、Excel 批次匯入藥品、查看個人申請/借用紀錄、一鍵取消個人未審核紀錄。
+  - 🔑 **系統管理員 (Admin)**：解鎖頂端審核選單、各子系統審核管理面板、單筆/批次狀態更新（已請購/已購入/已歸還/不通過等）、自估單價/採購總價核算、一鍵匯出 Excel、系統環境變數圖形化設定與 Logo 雲端上傳。
+- **實驗室視覺化排程與智慧防呆**：
+  - 支援時間軸日檢視 (08:00~18:00)、週課表網格、教室篩選與空間容量資訊。
+  - 智慧節次換算、多時段重複預約 (系列預約 groupId)、即時防衝堂檢查、個人預約綠色高亮標示、系列預約整批取消。
+  - 內建專用樣板，支援一鍵 A4 直式正式週課表預覽與列印。
+- **極致效能與現代化 UI/UX**：
+  - 採用 Tailwind CSS、Font Awesome 6.5.1 與 HTML5 `<dialog>` 自訂精美 Modal/Alert/Confirm 視窗。
+  - 支援圖片拖曳上傳、剪貼簿貼上 (<kbd>Ctrl+V</kbd>) 上傳、SheetJS 批次匯入與匯出。
+  - 雙層快取機制 (`CacheService` + 前端 `SystemCache`) 與 `DocumentFragment` 批量 DOM 渲染，實現 0 秒瞬間切換體驗。
+  - 後端全面採用 `LockService`，防止多名使用者同時提交或批次更新時造成試算表資料覆蓋衝突。
 
 ---
 
-## 🛠️ 開發與部署指南
+## 🗂️ 系統四大核心子系統
 
-### 1. 準備工作 (GCP 憑證設定)
-詳情請見目錄下的 `OAuth2_GuideLine.md`。您必須先前往 Google Cloud Console 申請 **OAuth 2.0 用戶端 ID**，並取得 `CLIENT_ID` 與 `CLIENT_SECRET`。
+```mermaid
+graph TD
+    Platform[🏫 設備組 教學資源服務平台]
+    Platform --> Sub1[1. 教學實驗設備借用<br>equipBorrow]
+    Platform --> Sub2[2. 自然科實驗室預約<br>lab]
+    Platform --> Sub3[3. 教學實驗設備需求申請<br>equip]
+    Platform --> Sub4[4. 藥品/物品請購<br>chem]
 
-### 2. 環境變數與配置設定 (PropertiesService)
-本專案的機密資訊（如試算表 ID）與學校專屬文字已全面抽離至 **伺服器屬性 (PropertiesService)** 中，未來轉移專案時不需在程式碼內尋找並修改寫死的文字。
+    Sub1 --> Sub1Detail[供師生借用器材、筆電、感測器<br>具財產標籤、歸還狀態管理與照片上傳]
+    Sub2 --> Sub2Detail[視覺化時間軸、日/週課表檢視<br>防衝堂檢查、重複預約、A4 週課表列印]
+    Sub3 --> Sub3Detail[教師年度設備/軟體需求填報<br>課綱設備判定、自估單價與審核追蹤]
+    Sub4 --> Sub4Detail[課程實驗藥品與耗材請購<br>固/液態濃度容量、Excel 範本與批次匯入]
+```
 
-**快速設定步驟：**
-1. 準備好您的 `CLIENT_ID` 與 `CLIENT_SECRET` (來自 GCP OAuth 2.0 設定，詳見 `OAuth2_GuideLine.md`)。
-2. 開啟 `Code.js`，滑到檔案最下方的 `setupProperties()` 函式。
-3. 依照註解說明，填入您的環境變數與特定文字：
-   - `SPREADSHEET_ID`: 存放表單資料的 Google 試算表 ID。
-   - `FOLDER_ID`: 存放使用者上傳圖片的 Google Drive 資料夾 ID。
-   - `LOGO_ID`: 前端介面左上角的 Logo 圖片 (Google Drive 檔案 ID)。
-   - `WEB_APP_URL`: 您**正式發布的 Web App URL**。
-   - `ADMIN_EMAILS`: 管理員的 Email 列表 (逗號分隔)。
-   - `ALLOWED_DOMAIN`: 限定登入的組織/學校網域。
-   - `SCHOOL_NAME`, `SYSTEM_TITLE` ...等前端渲染文字。
-   - `CLIENT_ID` 與 `CLIENT_SECRET`。
-4. 在編輯器上方的下拉選單中，選擇 `setupProperties` 函式並按下 **執行**。
-5. (選用) 執行後，可點擊左側 **專案設定 (齒輪圖示)** > 滑至底部的 **指令碼屬性** 檢查所有已寫入的環境變數。
+---
 
-### 3. 系統發布
-1. 點擊右上方 **部署** > **管理部署作業**（或新增部署作業）。
-2. 網頁應用程式設定：
-   - **執行身分**：`我 (開發者)`
+## 📂 專案檔案結構與模組職責說明
+
+本專案採用高度模組化架構，將後端邏輯、前端視圖、元件樣板與各功能腳本清晰分層：
+
+```text
+scienceprocurement/
+├── Code.js                         # 後端主程式 (GAS 伺服器邏輯、API 路由、試算表 CRUD、OAuth2)
+├── appsscript.json                 # Google Apps Script 專案設定檔 (時區、V8 引擎、網頁應用程式配置)
+├── OAuth2_GuideLine.md             # GCP OAuth 2.0 憑證申請與發布詳細指南
+├── README.md                       # 系統說明文件
+│
+├── 🎨 前端主框架與樣式
+│   ├── Index.html                  # 主頁面框架 (導覽列、側邊欄、對話框、分層模組載入)
+│   └── Stylesheet.html             # Tailwind CSS 核心樣式庫與客製化樣式
+│
+├── 🧩 前端共用元件與樣板 (IndexComponent*.html)
+│   ├── IndexComponentDatalist.html       # 共用資料清單元件 (年份/月份/關鍵字搜尋、分頁、批次更新、Excel 匯出)
+│   ├── IndexComponentLabTemplates.html   # 實驗室預約前端 HTML5 <template> 樣板庫 (卡片、時段、日明細、週方塊)
+│   ├── IndexComponentPrintSchedule.html  # 實驗室週課表 A4 專色列印專用樣板
+│   └── IndexComponentUserMenu.html       # 右上角使用者個人選單與登出下拉選單
+│
+├── 📑 前端功能分頁視圖 (IndexTab-*.html)
+│   ├── IndexTab-equipBorrow.html   # 【子系統 1】教學及實驗設備借用申請表單 (支援相片上傳、財產序號)
+│   ├── IndexTab-lab.html           # 【子系統 2】自然科實驗室預約排程主畫面 (時間軸、日/週檢視、快速預約)
+│   ├── IndexTab-equip.html         # 【子系統 3】教學及實驗設備需求申請表單 (課綱/非課綱設備/軟體、單價)
+│   ├── IndexTab-chem.html          # 【子系統 4】藥品與物品請購申請表單 (固/液態藥品、Excel 批次匯入)
+│   └── IndexTab-SystSetting.html   # 【系統後台】系統環境變數設定後台 (品牌設定、Logo 上傳預覽、試算表 ID)
+│
+└── ⚡ 前端 JavaScript 分層模組 (js-*.html)
+    ├── js-core.html                # Layer 1: 核心工具 (Session Token、Debounce、DOM 快取、AppState、ApiService)
+    ├── js-config.html              # Layer 1.5: 系統常數 (狀態選項、TABLE_COLUMNS_CONFIG 表格配置、日期過濾)
+    ├── js-ui-utility.html          # Layer 2: UI 輔助工具 (Promise 版 window.alert / window.showConfirm 覆寫)
+    ├── js-ui-widgets.html          # Layer 2: UI 核心類別 (PageNav 分頁控制、DataTableManager 資料表管理器)
+    ├── js-auth.html                # Layer 3: 認證與授權 (Google OAuth 彈窗登入、Token 接收、登出)
+    ├── js-switch.html              # Layer 3: 路由與身分介面 (Tab 切換、側邊欄縮放、依角色動態渲染 UI)
+    ├── js-forms.html               # Layer 4: 表單與檔案 (三大表單提交、圖片拖曳/貼上 Base64 轉換、表單重置)
+    ├── js-admin.html               # Layer 5: 管理功能 (審核清單渲染、狀態與總價更新、SheetJS 匯出、個人紀錄刪除)
+    ├── js-settings.html            # Layer 5: 系統設定 (非同步讀寫 PropertiesService、Logo 上傳至 Drive)
+    ├── js-lab-core.html            # Layer 6: 實驗室核心 (LabState 狀態、姓名隱私遮蔽、防衝堂邏輯)
+    ├── js-lab-render.html          # Layer 7: 實驗室渲染 (DocumentFragment 時間軸渲染、教室卡片、週課性格子)
+    ├── js-lab-modal.html           # Layer 8: 實驗室對話框 (新增預約/日明細/週課表 Modal、系列取消、A4 列印)
+    └── js-main.html                # 模組索引說明與依賴規範檔
+```
+
+---
+
+## ⚙️ 後端架構與分區索引 (`Code.js`)
+
+`Code.js` 包含完整的 8 大功能分區，職責分明且具備高維護性：
+
+| 分區 (Zone) | 功能區域名稱 | 主要函式與職責說明 |
+| :--- | :--- | :--- |
+| **ZONE 1** | 全域系統配置與參數中心 | 一次性讀取 `PropertiesService` 屬性 (`ENV_PROPS`)，定義試算表 ID、網域、UI 品牌字典。 |
+| **ZONE 2** | 身分驗證與 OAuth2 安全模組 | `isAdminUser`, `isBlockedUser` (防學生請購), `getClientId`, `getLoginUrl`, `getAuthStatus`。 |
+| **ZONE 3** | Web 路由與 HTML 渲染導覽 | `doGet` (處理 OAuth 回跳與首頁渲染), `processOAuthCallback` (Token 交換), `include` 樣板載入器。 |
+| **ZONE 4** | 前台表單收件與寫入控制 | `submitApplication`, `submitEquipApplication`, `submitEquipBorrowApplication`, `batchSubmitApplication` (含 `LockService` 與 Gmail 通知)。 |
+| **ZONE 5** | 資料檢視與管理員進階控制 | `getAdminData`, `getUserData`, `batchUpdateProcurementStatus`, `deleteUserRequests`, `logoutOAuth`。 |
+| **ZONE 6** | 試算表存取引擎與快取映射 | `getSheetData` (5分鐘快取), `mapSheetRow` (欄位自動適配與轉換), `appendRowFromMap_`。 |
+| **ZONE 7** | 自然科實驗室預約獨立核心 | `getLabData` (教室/節次/預約讀取), `submitLabBooking` (防衝堂檢查/重複預約), `cancelLabBooking` (單筆/系列取消)。 |
+| **ZONE 8** | 系統屬性安裝與自訂 UI 設定 | `setupProperties` (初始環境建置), `getSystemSettings`, `saveSystemSettings`, `uploadLogoImage`。 |
+
+---
+
+## 📊 資料庫結構 (Google 試算表對應表)
+
+系統採用 4 張獨立的 Google 試算表作為各子系統資料庫，主工作表名稱預設皆為 `表單回應 1`：
+
+### 1. 藥品/物品請購試算表 (`SPREADSHEET_ID`)
+- **工作表名稱**：`表單回應 1`
+- **欄位列表**：
+  1. `時間戳記` 2. `物品/藥品中文名稱` 3. `藥品英文名稱(含化學式，分子量)或物品名稱` 4. `所需數量` 5. `物品分類/化學藥品狀態` 6. `藥品濃度(液態)` 7. `課程使用時間` 8. `請勾選所需科別` 9. `申請人` 10. `電子郵件地址` 11. `物品/藥品照片` 12. `藥品容量(液態)` 13. `是否請購` 14. `備註` 15. `採購總價`
+
+### 2. 教學及實驗設備需求申請試算表 (`EQUIP_SHEET_ID`)
+- **工作表名稱**：`表單回應 1`
+- **欄位列表**：
+  1. `時間戳記` 2. `電子郵件地址` 3. `申請人` 4. `申請科別` 5. `設備名稱/軟體名稱` 6. `數量` 7. `自估單價` 8. `需求及用途說明` 9. `是否為課綱表定設備` 10. `設備或軟體存置地點` 11. `對應科別` 12. `是否購入` 13. `備註` 14. `採購總價` 15. `照片`
+
+### 3. 教學實驗設備借用試算表 (`EQUIP_BORROW_SHEET_ID`)
+- **工作表名稱**：`表單回應 1`
+- **欄位列表**：
+  1. `日期時間` 2. `科室` 3. `物品` 4. `數量` 5. `借用人` 6. `借用說明` 7. `是否歸還` 8. `備註` 9. `電子郵件` 10. `照片`
+
+### 4. 自然科實驗室預約試算表 (`LAB_SPREADSHEET_ID`)
+包含 3 個工作表：
+- **`表單回應 1` (預約紀錄)**：
+  1. `時間戳記` 2. `電子郵件` 3. `使用班級` 4. `申請教師` 5. `使用日期` 6. `使用節次` 7. `使用實驗室` 8. `實驗名稱/課程內容` 9. `實驗所需化學藥品` 10. `實驗所需器材` 11. `使用型態` 12. `人數` 13. `申請學生` 14. `(預留)` 15. `groupId` (系列預約識別碼)
+- **`可預約教室列表` (教室清單)**：
+  1. `教室代碼` 2. `教室名稱` 3. `地點/館別` 4. `容納人數` 5. `樓層`
+- **`時間節數對應表` (時段對應)**：
+  1. `節次名稱` (例如：第一節、第二節...) 2. `起訖時間` (例如：08:10-09:00)
+
+---
+
+## 🛠️ 安裝與部署指南 (Deployment Guide)
+
+### 步驟 1：建立 GCP OAuth 2.0 用戶端憑證
+詳見 [OAuth2_GuideLine.md](file:///c:/Users/chaus/%E8%A8%AD%E5%82%99%E7%B5%84%E8%97%A5%E5%93%81%E7%89%A9%E5%93%81%E6%8E%A1%E8%B3%BC%E7%AE%A1%E7%90%86/scienceprocurement/OAuth2_GuideLine.md)。
+1. 前往 [Google Cloud Console](https://console.cloud.google.com/) 建立專案。
+2. 進入「API 與服務」>「憑證」> 建立 **OAuth 用戶端 ID**（類型選「網頁應用程式」）。
+3. 取得 `CLIENT_ID` 與 `CLIENT_SECRET`。
+
+### 步驟 2：建立 Google 試算表與雲端資料夾
+1. 依據上述【資料庫結構】建立 4 份 Google 試算表，並記下其試算表 ID。
+2. 於 Google Drive 建立一個存放上傳圖片的資料夾，設定共用權限為**「知道連結的任何人均可檢視」**，並記下 `FOLDER_ID`。
+
+### 步驟 3：設定 GAS 專案環境變數
+1. 開啟 GAS 編輯器，前往 `Code.js` 底部的 `setupProperties()` 函式。
+2. 填入您的環境參數：
+   - `SPREADSHEET_ID`：藥品請購試算表 ID
+   - `EQUIP_SHEET_ID`：設備需求申請試算表 ID
+   - `EQUIP_BORROW_SHEET_ID`：設備借用試算表 ID
+   - `LAB_SPREADSHEET_ID`：實驗室預約試算表 ID
+   - `FOLDER_ID`：圖片儲存資料夾 ID
+   - `ADMIN_EMAILS`：管理員信箱清單 (逗號分隔)
+   - `ALLOWED_DOMAIN`：允許登入的學校網域 (例如：`fhsh.khc.edu.tw`)
+   - `CLIENT_ID` 與 `CLIENT_SECRET`：GCP OAuth 憑證
+   - `SCHOOL_NAME`, `SYSTEM_TITLE`, `SYSTEM_DESC` 等前端呈現文字
+3. 於編輯器上方選擇 `setupProperties` 函式並點擊 **「執行」**。
+
+### 步驟 4：發布網頁應用程式 (Web App)
+1. 點擊編輯器右上角 **「部署」** > **「管理部署作業」**（或新增部署作業）。
+2. 設定選項：
+   - **種類**：`網頁應用程式`
+   - **執行身分**：`我 (開發者帳號)`
    - **誰可以存取**：`所有人`
-3. 取得網址後，務必將此網址更新至：
-   - `Code.js` 的 `getAppUrl()`。
+3. 部署完成後複製 **網頁應用程式網址 (Web App URL)**。
+4. 將該網址填入：
    - GCP Console 的「已授權的重新導向 URI」。
+   - GAS 的 `WEB_APP_URL` 系統屬性（或透過系統後台「系統設定」介面修改）。
 
 ---
 
-## 📝 授權與依賴套件
+## 🔒 系統安全性與權限規範
 
-- **前端樣式**：[Tailwind CSS (CDN)](https://tailwindcss.com/)
-- **Excel 匯出**：[SheetJS (xlsx.full.min.js)](https://sheetjs.com/)
-- **後端服務**：Google Apps Script 內建之 `SpreadsheetApp`, `DriveApp`, `MailApp`, `UrlFetchApp`, `CacheService`, `LockService`。
+1. **Token 隔離機制**：Session Token 保存於伺服器端 `CacheService`，客戶端僅持有 UUID 字串，無 JWT 偽造或金鑰洩漏風險。
+2. **網域嚴格白名單**：後端強制比對 Google 帳號網域，非授權網域帳號無法取得存取憑證。
+3. **學生身分權限限縮**：學生帳號禁止提交藥品/設備採購申請，防杜未授權之採購行為。
+4. **紀錄取消權限驗證**：一般使用者僅能取消/刪除屬於自己且尚未審核的申請紀錄，防止惡意刪除他人資料。
+5. **圖片防破圖與縮圖機制**：Logo 與上傳照片全面採用 Google Drive 縮圖快取 API 渲染，避免權限與直連破圖問題。
+
+---
+
+## 📦 依賴套件與技術棧
+
+- **後端執行環境**：Google Apps Script (V8 Engine)
+- **Google Workspace API**：`SpreadsheetApp`, `DriveApp`, `MailApp`, `UrlFetchApp`, `CacheService`, `LockService`, `PropertiesService`
+- **前端樣式**：[Tailwind CSS (OKLCH)](https://tailwindcss.com/)
+- **圖示庫**：[Font Awesome 6.5.1](https://fontawesome.com/)
+- **Excel 處理模組**：[SheetJS (xlsx.full.min.js 0.18.5)](https://sheetjs.com/)
+
+---
+
+<div align="center">
+  <sub>🏫 國立鳳新高級中學 設備組 教學資源服務平台管理系統 | 維護單位：設備組</sub>
+</div>
+
