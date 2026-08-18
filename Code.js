@@ -52,21 +52,14 @@ function isAdminUser(email) {
   return ADMIN_EMAILS.indexOf(norm) !== -1;
 }
 
-// 判斷是否為被阻擋的帳號
-function isBlockedUser(email) {
+// 判斷是否為學生帳號 (學生帳號規則：6位數字開頭)
+function isStudentAccount(email) {
   if (!email) return false;
-  // 特例保護：如果是管理員帳號，絕對不可以被判斷為學生或受阻擋
+  // 特例保護：如果是管理員帳號，絕對不可以被判斷為學生
   if (isAdminUser(email)) return false;
 
-  for (var i = 0; i < BLOCKED_ACCOUNT_RULES.length; i++) {
-    var rule = BLOCKED_ACCOUNT_RULES[i];
-    if (rule instanceof RegExp) {
-      if (rule.test(String(email).trim())) return true;
-    } else if (typeof rule === 'string') {
-      if (email.toLowerCase().trim() === rule.toLowerCase().trim()) return true;
-    }
-  }
-  return false;
+  const studentRegex = /^\d{6}@/i;
+  return studentRegex.test(String(email).trim());
 }
 
 // 供開發者在編輯器內手動執行，以觸發 Email 授權視窗
@@ -240,8 +233,13 @@ function getAuthStatus(token) {
     var email = (profile.email || '').trim();
     var displayName = profile.name || email.split('@')[0];
 
-    if (!email.toLowerCase().endsWith('@' + (ALLOWED_DOMAIN || '').toLowerCase().trim())) {
-      return { loggedIn: true, email: email, displayName: displayName, role: "invalid", message: "非學校網域帳號" };
+    // 嚴格檢查：必須屬於 ALLOWED_DOMAIN 才能登入
+    if (!ALLOWED_DOMAIN || ALLOWED_DOMAIN === '請設定 ALLOWED_DOMAIN') {
+      return { loggedIn: true, email: email, displayName: displayName, role: "invalid", message: "系統尚未設定允許登入的組織網域 (ALLOWED_DOMAIN)" };
+    }
+    
+    if (!email.toLowerCase().endsWith('@' + ALLOWED_DOMAIN.toLowerCase().trim())) {
+      return { loggedIn: true, email: email, displayName: displayName, role: "invalid", message: "非允許登入的組織網域，僅限 @" + ALLOWED_DOMAIN + " 帳號使用" };
     }
 
     // 優先判定為管理員
@@ -249,12 +247,13 @@ function getAuthStatus(token) {
       return { loggedIn: true, email: email, displayName: displayName, role: "admin", picture: profile.picture };
     }
 
-    // 檢查是否為學生帳號 (六位數字) 或在阻擋名單內
-    if (isBlockedUser(email)) {
+    // 檢查是否為學生帳號 (六位數字)
+    if (isStudentAccount(email)) {
       return { loggedIn: true, email: email, displayName: displayName, role: "student", message: "學生帳號僅開放「設備借用」與「自然科實驗室預約」，無權限進行藥品請購與設備申請。" };
     }
 
-    return { loggedIn: true, email: email, displayName: displayName, role: "user", picture: profile.picture };
+    // 通過網域檢查且非學生、非管理員，即為一般教職員帳號
+    return { loggedIn: true, email: email, displayName: displayName, role: "teacher", picture: profile.picture };
   } catch (e) {
     return { loggedIn: false, email: "", role: "guest", loginUrl: getLoginUrl() };
   }

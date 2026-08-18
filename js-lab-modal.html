@@ -521,7 +521,11 @@
       .replace(/{{tbodyRowsHtml}}/g, tbodyRowsHtml)
       .replace(/{{nowStr}}/g, nowStr);
 
-    const printWin = window.open('', '_blank', 'width=900,height=750,scrollbars=yes');
+    const w = 900;
+    const h = 750;
+    const left = (screen.width - w) / 2;
+    const top = (screen.height - h) / 2;
+    const printWin = window.open('', '_blank', `width=${w},height=${h},top=${top},left=${left},scrollbars=yes`);
     if (printWin) { printWin.document.open(); printWin.document.write(htmlContent); printWin.document.close(); }
     else alert('無法開啟列印視窗，請檢查您的瀏覽器是否阻擋了彈出式視窗。');
   }

@@ -24,7 +24,11 @@
         this.popup.focus();
         return;
       }
-      this.popup = window.open(loginUrl, 'gas_oauth_popup', 'width=520,height=650,scrollbars=yes,resizable=yes');
+      const w = 520;
+      const h = 650;
+      const left = (screen.width - w) / 2;
+      const top = (screen.height - h) / 2;
+      this.popup = window.open(loginUrl, 'gas_oauth_popup', `width=${w},height=${h},top=${top},left=${left},scrollbars=yes,resizable=yes`);
       if (!this.popup || this.popup.closed) {
         alert('無法開啟登入視窗，請確認您的瀏覽器未封鎖彈出式視窗（popup），然後再試一次。');
         const btn = document.getElementById('btn-login-logout');
