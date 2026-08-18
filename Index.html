@@ -3,7 +3,8 @@
 
 <head>
   <base target="_top">
-  <script src="https://cdn.tailwindcss.com"></script>
+  <?!= include('Stylesheet'); ?>
+  <!-- <script src="https://cdn.tailwindcss.com"></script> -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <style>
@@ -119,19 +120,19 @@
         </div>
       </div>
       <div class="flex space-x-2 items-center">
-        <button id="btn-admin-chem" onclick="switchView('admin', 'chem')"
+        <button id="btn-admin-chem" data-allowed-roles="admin" onclick="switchView('admin', 'chem')"
           class="px-3.5 py-1.5 rounded-md bg-slate-800 text-slate-300 font-medium hover:bg-slate-700 transition text-sm hidden">
           <i class="fa-solid fa-flask mr-1"></i> 藥品物品請購審核
         </button>
-        <button id="btn-admin-equipBorrow" onclick="switchView('admin', 'equipBorrow')"
+        <button id="btn-admin-equipBorrow" data-allowed-roles="admin" onclick="switchView('admin', 'equipBorrow')"
           class="px-3.5 py-1.5 rounded-md bg-slate-800 text-slate-300 font-medium hover:bg-slate-700 transition text-sm hidden">
           <i class="fa-solid fa-box-open mr-1"></i> 設備借用審核
         </button>
-        <button id="btn-admin-equip" onclick="switchView('admin', 'equip')"
+        <button id="btn-admin-equip" data-allowed-roles="admin" onclick="switchView('admin', 'equip')"
           class="px-3.5 py-1.5 rounded-md bg-slate-800 text-slate-300 font-medium hover:bg-slate-700 transition text-sm hidden">
           <i class="fa-solid fa-microscope mr-1"></i> 教學設備申請審核
         </button>
-        <button id="btn-settings" onclick="switchGlobalView('settings')"
+        <button id="btn-settings" data-allowed-roles="admin" onclick="switchGlobalView('settings')"
           class="px-3.5 py-1.5 rounded-md bg-slate-800 text-slate-300 font-medium hover:bg-slate-700 transition text-sm hidden">
           <i class="fa-solid fa-cog mr-1"></i> 系統設定
         </button>
@@ -301,16 +302,19 @@
   <?!= include('js-config'); ?>
 
   <!-- Layer 2: UI 元件（PageNav、DataTableManager、自訂 Alert/Confirm） -->
+  <?!= include('js-ui-utility'); ?>
   <?!= include('js-ui-widgets'); ?>
 
   <!-- Layer 3: 認證與路由（登入登出、setupUI、switchView、switchApplyForm） -->
   <?!= include('js-auth'); ?>
+  <?!= include('js-switch'); ?>
 
   <!-- Layer 4: 申請表單（藥品/設備/借用 三大表單提交、圖片上傳） -->
   <?!= include('js-forms'); ?>
 
   <!-- Layer 5: 管理功能（清單渲染、批次更新、匯出、系統設定、Logo 上傳） -->
   <?!= include('js-admin'); ?>
+  <?!= include('js-settings'); ?>
 
   <!-- Layer 6: 實驗室預約 - 核心資料與工具（常數、狀態、日期工具、視圖切換） -->
   <?!= include('js-lab-core'); ?>

@@ -1,0 +1,540 @@
+<script>
+  // ==========================================
+  // Module: js-switch.html
+  // Responsibility: 處理畫面路由 (Routing)、側邊欄選單的縮放互動、以及根據使用者身分動態控制 UI 顯示狀態 (狀態驅動 UI)。
+  // Dependencies: js-core.html (提供 AppState, SystemCache), js-auth.html (依賴登入狀態)
+  // Exports: setupUI, renderRoleBasedUI, switchView, switchApplyForm, toggleSidebar, setSubmitBtnState, hideLoadingOverlay
+  // ==========================================
+
+  /**
+   * @description 用於 js-switch 內部的安全 DOM 取用封裝
+   */
+  const AUTH_DOM = {
+    get: id => document.getElementById(id),
+    safeSet: (id, val) => { const el = document.getElementById(id); if (el) el.value = val; }
+  };
+
+  /**
+   * 通用提交按鈕狀態設定器
+   * 控制表單送出按鈕的啟用/禁用狀態、顯示文字與按鈕顏色樣式
+   * @param {string} btnId - 按鈕的 HTML ID
+   * @param {boolean} enabled - 是否啟用
+   * @param {string} text - 顯示在按鈕上的文字
+   * @param {string} colorClass - 尾風 (Tailwind) CSS 的顏色類別名稱
+   */
+  function setSubmitBtnState(btnId, enabled, text, colorClass) {
+    const btn = AUTH_DOM.get(btnId);
+    if (!btn) return;
+    btn.disabled = !enabled;
+    btn.innerHTML = `<span>${text}</span>`;
+    btn.className = `px-5 py-2.5 rounded-lg ${colorClass} font-medium transition duration-200 shadow-sm flex items-center justify-center`;
+  }
+
+  /**
+   * 隱藏全域的網頁載入中遮罩 (Loading Overlay)
+   */
+  function hideLoadingOverlay() {
+    const overlay = document.getElementById('loading-overlay');
+    if (overlay) {
+      overlay.classList.add('opacity-0');
+      setTimeout(() => overlay.classList.add('hidden'), 300);
+    }
+  }
+
+  /**
+   * 全域 UI 初始化進入點
+   * 在取得登入狀態後被呼叫，負責設定使用者資訊、渲染選單與根據權限預載資料。
+   * @param {Object} status - 包含使用者登入資訊與權限的狀態物件
+   */
+  function setupUI(status) {
+    if (status.loggedIn) {
+      AppState.currentUserEmail = status.email;
+      AppState.currentUserDisplayName = status.displayName || AppState.currentUserEmail.split('@')[0];
+      AppState.currentUserEmail = AppState.currentUserEmail;
+      AppState.currentUserDisplayName = AppState.currentUserDisplayName;
+
+      fillFormsUserInfo(AppState.currentUserEmail, AppState.currentUserDisplayName);
+      renderUserAuthMenu(status.picture);
+
+      window.currentAuthRole = status.role;
+      renderRoleBasedUI(status.role, status.message);
+
+      if (status.role !== 'student' && status.role !== 'invalid') {
+        triggerBackgroundPrefetch(status.role);
+      }
+    } else {
+      AppState.currentUserEmail = '';
+      AppState.currentUserDisplayName = '';
+      AppState.currentUserEmail = '';
+      AppState.currentUserDisplayName = '';
+
+      fillFormsUserInfo('尚未登入', '尚未登入');
+      renderGuestAuthMenu(status.loginUrl);
+      window.currentAuthRole = 'guest';
+      renderRoleBasedUI('guest', '');
+    }
+  }
+
+  /**
+   * 將使用者的姓名與信箱，預先帶入到各個申請表單的對應欄位中
+   * @param {string} email - 使用者信箱
+   * @param {string} name - 使用者名稱
+   */
+  function fillFormsUserInfo(email, name) {
+    AUTH_DOM.safeSet('email', email);
+    AUTH_DOM.safeSet('applicant', name);
+    AUTH_DOM.safeSet('equip_applicant', name);
+    AUTH_DOM.safeSet('equipBorrow_applicant', name);
+    AUTH_DOM.safeSet('equipBorrow_email', email);
+    AUTH_DOM.safeSet('equip_email', email);
+  }
+
+  /**
+   * 渲染已登入使用者的右上角選單與頭像
+   * @param {string} [picture] - Google 使用者的頭像網址 (可選)
+   */
+  function renderUserAuthMenu(picture) {
+    const btnAuth = AUTH_DOM.get('btn-login-logout');
+    const dropdownMenu = AUTH_DOM.get('user-dropdown-menu');
+    if (!btnAuth) return;
+
+    let userIconHtml = `<div class="w-10 h-10 rounded-full bg-slate-500 flex items-center justify-center text-white font-bold text-lg">${AppState.currentUserDisplayName.charAt(0)}</div>`;
+    if (picture) {
+      userIconHtml = `<img src="${picture}" class="w-10 h-10 rounded-full border border-slate-300 object-cover" alt="User" referrerpolicy="no-referrer">`;
+    }
+
+    btnAuth.innerHTML = userIconHtml;
+    btnAuth.href = "#";
+    btnAuth.onclick = function (e) {
+      e.preventDefault();
+      if (dropdownMenu) dropdownMenu.classList.toggle('hidden');
+    };
+    btnAuth.className = "rounded-full shadow-sm hover:shadow-md transition focus:outline-none flex items-center justify-center border-2 border-transparent hover:border-slate-300 p-0.5 ml-2";
+
+    const pubWrapper = AUTH_DOM.get('public-computer-wrapper');
+    if (pubWrapper) pubWrapper.classList.add('hidden');
+
+    const dropdownGreeting = AUTH_DOM.get('dropdown-greeting');
+    if (dropdownGreeting) {
+      dropdownGreeting.innerText = `${AppState.currentUserDisplayName}，你好`;
+      dropdownGreeting.classList.remove('hidden');
+    }
+  }
+
+  /**
+   * 渲染未登入(訪客)的右上角選單，提供登入按鈕與登入連結彈窗邏輯
+   * @param {string} [loginUrl] - GAS 產生的 OAuth 登入網址
+   */
+  function renderGuestAuthMenu(loginUrl) {
+    const btnAuth = AUTH_DOM.get('btn-login-logout');
+    const dropdownMenu = AUTH_DOM.get('user-dropdown-menu');
+    if (!btnAuth) return;
+
+    if (dropdownMenu) dropdownMenu.classList.add('hidden');
+
+    btnAuth.innerHTML = '<i class="fa-solid fa-sign-in-alt mr-1"></i> 登入';
+    btnAuth.href = "#";
+    btnAuth.onclick = function (e) {
+      e.preventDefault();
+      const targetUrl = loginUrl || window.cachedLoginUrl;
+      if (targetUrl) {
+        let finalUrl = targetUrl;
+        const pubCb = AUTH_DOM.get('is-public-computer');
+        if (pubCb && pubCb.checked) {
+          // 公用電腦模式：先強制登出 Google 所有帳號，徹底避免 GAS 多重帳號 Bug
+          LoginManager.openPopup('https://accounts.google.com/Logout');
+          setTimeout(() => {
+            if (LoginManager.popup && !LoginManager.popup.closed) {
+              LoginManager.popup.location.href = finalUrl;
+            }
+          }, 2000);
+          return;
+        }
+        LoginManager.openPopup(finalUrl);
+      } else {
+        btnAuth.innerText = '載入中...';
+        ApiService.auth.getLoginUrl()
+          .then(url => {
+            let finalUrl = url;
+            const pubCb = AUTH_DOM.get('is-public-computer');
+            if (pubCb && pubCb.checked) {
+              LoginManager.openPopup('https://accounts.google.com/Logout');
+              setTimeout(() => {
+                if (LoginManager.popup && !LoginManager.popup.closed) {
+                  LoginManager.popup.location.href = finalUrl;
+                }
+              }, 2000);
+              return;
+            }
+            window.cachedLoginUrl = finalUrl;
+            LoginManager.openPopup(finalUrl);
+          })
+          .catch(err => {
+            btnAuth.innerText = '登入';
+            alert('無法取得登入網址，請稍後再試或重新整理網頁。');
+          });
+      }
+    };
+    btnAuth.className = "px-3.5 py-1.5 rounded-md bg-slate-200 text-slate-800 font-medium shadow-sm hover:bg-slate-300 transition text-sm flex items-center gap-1 ml-2";
+
+    const pubWrapper = AUTH_DOM.get('public-computer-wrapper');
+    if (pubWrapper) pubWrapper.classList.remove('hidden');
+
+    // 定期更新 login url
+    if (!window.loginUrlInterval) {
+      window.loginUrlInterval = setInterval(function () {
+        ApiService.auth.getLoginUrl().then(url => {
+          if (btnAuth.innerText === '登入') {
+            window.cachedLoginUrl = url;
+          }
+        }).catch(err => console.warn('Failed to refresh login url:', err));
+      }, 8 * 60 * 1000);
+    }
+  }
+
+  /**
+   * 狀態驅動 UI 核心渲染器
+   * 根據使用者的權限 (admin, teacher, student, guest, invalid)，
+   * 動態控制警告訊息、頁籤顯示狀態 (利用 data-allowed-roles 屬性)，以及送出按鈕的狀態。
+   * @param {string} role - 使用者權限字串
+   * @param {string} [authMessage] - 後端回傳的授權錯誤提示文字
+   */
+  function renderRoleBasedUI(role, authMessage) {
+    const loginWarning = AUTH_DOM.get('login-warning');
+    const title = AUTH_DOM.get('login-warning-title');
+    const desc = AUTH_DOM.get('login-warning-desc');
+
+    const DISABLED_CLASS = 'cursor-not-allowed bg-slate-400 text-slate-200';
+    const ENABLED_BLUE = 'bg-blue-600 text-white hover:bg-blue-700';
+    const LAB_ENABLED_CLASS = "px-4 py-2 bg-indigo-600 text-white font-medium hover:bg-indigo-700 rounded-lg transition shadow-md";
+    const LAB_DISABLED_CLASS = "px-4 py-2 bg-slate-400 text-slate-200 font-medium rounded-lg transition shadow-md cursor-not-allowed";
+
+    const isStudent = (role === 'student');
+    const isGuest = (role === 'guest');
+    const isInvalid = (role === 'invalid');
+    const isAdmin = (role === 'admin');
+
+    // 1. 處理警告訊息
+    if (loginWarning) {
+      if (isInvalid) {
+        loginWarning.classList.remove('hidden');
+        if (title) title.innerText = '提示：無效帳號';
+        if (desc) desc.innerText = '您目前登入的是 ' + AppState.currentUserEmail + '。' + (authMessage || '請點擊右上方的「登出」並重新使用合適帳號登入。');
+      } else if (isGuest) {
+        loginWarning.classList.remove('hidden');
+        if (title) title.innerText = '提示：唯讀模式';
+        if (desc) desc.innerText = '填寫與送出申請前，您必須點擊右上方的「登入」使用學校帳號。';
+      } else if (isStudent) {
+        if (title) title.innerText = '提示：權限不足';
+        if (desc) desc.innerText = '您目前以學生帳號 (' + AppState.currentUserEmail + ') 登入。藥品請購與設備申請僅限教職員；學生可進行「1. 教學及實驗設備借用」與「2. 自然科實驗室預約」。';
+        if (AppState.currentSystemTab === 'lab' || AppState.currentSystemTab === 'equipBorrow') loginWarning.classList.add('hidden');
+        else loginWarning.classList.remove('hidden');
+      } else {
+        loginWarning.classList.add('hidden');
+      }
+    }
+
+    // 2. 狀態驅動：處理所有加上 data-allowed-roles 的按鈕與區塊
+    document.querySelectorAll('[data-allowed-roles]').forEach(el => {
+      const allowedRoles = el.dataset.allowedRoles.split(',');
+      if (allowedRoles.includes(role)) {
+        el.classList.remove('hidden');
+      } else {
+        el.classList.add('hidden');
+      }
+    });
+
+    // 3. 表單送出按鈕的狀態管理
+    setSubmitBtnState('submitBtn', !isInvalid && !isStudent && !isGuest, 
+      isGuest ? '需登入後才能送出請購' : (isStudent ? '學生無權限' : (isInvalid ? '無權限請購' : '送出請購')), 
+      (!isInvalid && !isStudent && !isGuest) ? ENABLED_BLUE : DISABLED_CLASS);
+
+    setSubmitBtnState('equip_submitBtn', !isInvalid && !isStudent && !isGuest, 
+      isGuest ? '需登入後才能送出申請' : (isStudent ? '學生無權限' : (isInvalid ? '無權限申請' : '送出申請')), 
+      (!isInvalid && !isStudent && !isGuest) ? ENABLED_BLUE : DISABLED_CLASS);
+
+    setSubmitBtnState('equipBorrow_submitBtn', !isInvalid && !isGuest, 
+      isGuest ? '需登入後才能送出借用' : (isInvalid ? '無權限借用' : '送出借用申請'), 
+      (!isInvalid && !isGuest) ? ENABLED_BLUE : DISABLED_CLASS);
+
+    const labBtn = AUTH_DOM.get('lab_submitBtn');
+    if (labBtn) {
+      if (!isInvalid && !isGuest) {
+        labBtn.disabled = false;
+        labBtn.innerHTML = '<span>確認預約</span>';
+        labBtn.className = LAB_ENABLED_CLASS;
+      } else {
+        labBtn.disabled = true;
+        labBtn.innerHTML = isGuest ? '<span>需登入後才能送出預約</span>' : '<span>無權限預約</span>';
+        labBtn.className = LAB_DISABLED_CLASS;
+      }
+    }
+
+    // 4. 切換頁面與預先載入資料
+    if (isInvalid || isStudent || isGuest) {
+      switchView('apply');
+      if (AppState.currentSystemTab === 'lab' && typeof fetchLabBackendData === 'function' && isStudent) {
+        fetchLabBackendData();
+      }
+    }
+  }
+
+  /**
+   * 觸發背景資料預載 (Prefetch)
+   * 當使用者登入成功且具備權限時，提前向後端抓取資料並快取，加速後續切換頁籤的速度。
+   * @param {string} role - 使用者權限字串
+   */
+  function triggerBackgroundPrefetch(role) {
+    setTimeout(() => {
+      if (!window.SystemCache) return;
+      const token = typeof getToken === 'function' ? getToken() : null;
+      ['chem', 'equip', 'equipBorrow'].forEach(sys => {
+        if (role === 'admin') {
+          window.SystemCache.fetchData(`admin_${sys}`, () => window.callGas('getAdminData', token, sys), () => { });
+        }
+        window.SystemCache.fetchData(`user_${sys}`, () => window.callGas('getUserData', token, sys), () => { });
+      });
+      window.SystemCache.fetchData('labData', () => window.callGas('getLabData'), () => { });
+      
+      // 管理員登入時，一併預載系統設定
+      if (role === 'admin' && typeof loadSystemSettings === 'function') {
+        loadSystemSettings();
+      }
+    }, 1000);
+  }
+
+  /**
+   * 設定 Tab 按鈕的選取中與未選取中樣式切換
+   * @param {Array<HTMLElement>} btnArray - 所有參與切換的按鈕元素陣列
+   * @param {HTMLElement|null} activeBtn - 當前要設為 Active 狀態的按鈕
+   */
+  function setTabActiveState(btnArray, activeBtn) {
+    btnArray.forEach(btn => {
+      if (!btn) return;
+      if (btn === activeBtn) {
+        btn.classList.remove('bg-slate-800', 'text-slate-300', 'hover:bg-slate-700');
+        btn.classList.add('bg-blue-600', 'text-white', 'shadow-sm', 'hover:bg-blue-700');
+      } else {
+        btn.classList.remove('bg-blue-600', 'text-white', 'shadow-sm', 'hover:bg-blue-700');
+        btn.classList.add('bg-slate-800', 'text-slate-300', 'hover:bg-slate-700');
+      }
+    });
+  }
+
+  /**
+   * 切換全域視圖模式 (Main 業務區塊 vs 系統設定區塊)
+   * @param {string} mode - 'main' 或是 'settings'
+   */
+  function switchGlobalView(mode) {
+    if (typeof DOM === 'undefined' || !DOM.mainContent || !DOM.settingsContent) return;
+    if (mode === 'settings') {
+      DOM.mainContent.classList.add('hidden');
+      DOM.settingsContent.classList.remove('hidden');
+      setTabActiveState([DOM.btnApply, DOM.btnUserList, DOM.btnSettings], DOM.btnSettings);
+      if (typeof loadSystemSettings === 'function') loadSystemSettings();
+    } else {
+      DOM.settingsContent.classList.add('hidden');
+      DOM.mainContent.classList.remove('hidden');
+      setTabActiveState([DOM.btnSettings], null);
+    }
+  }
+
+  /**
+   * 業務邏輯內的視圖切換器 (Routing)
+   * 控制要顯示「填寫申請」、「個人清單」還是「管理員面板」，並更新對應的 Tab 按鈕外觀。
+   * @param {string} view - 視圖名稱 ('apply', 'user-list', 'admin')
+   * @param {string} [sys] - 系統分類名稱 ('chem', 'equip', 'equipBorrow', 'lab')
+   */
+  function switchView(view, sys) {
+    try {
+      if (typeof switchGlobalView === 'function') switchGlobalView('main');
+      if (sys) AppState.currentSystemTab = sys;
+      AppState.currentActionView = view;
+
+      let activeAdminBtn = null;
+      if (view === 'admin') {
+        if (AppState.currentSystemTab === 'chem') activeAdminBtn = AUTH_DOM.get('btn-admin-chem');
+        else if (AppState.currentSystemTab === 'equip') activeAdminBtn = AUTH_DOM.get('btn-admin-equip');
+        else if (AppState.currentSystemTab === 'equipBorrow') activeAdminBtn = AUTH_DOM.get('btn-admin-equipBorrow');
+      }
+
+      const allBtns = [];
+      if (typeof DOM !== 'undefined') {
+        allBtns.push(DOM.btnApply, DOM.btnUserList);
+      }
+      allBtns.push(AUTH_DOM.get('btn-admin-chem'), AUTH_DOM.get('btn-admin-equip'), AUTH_DOM.get('btn-admin-equipBorrow'));
+      
+      let targetActiveBtn = null;
+      if (view === 'apply' && typeof DOM !== 'undefined') targetActiveBtn = DOM.btnApply;
+      else if (view === 'user-list' && typeof DOM !== 'undefined') targetActiveBtn = DOM.btnUserList;
+      else if (view === 'admin') targetActiveBtn = activeAdminBtn;
+      
+      setTabActiveState(allBtns, targetActiveBtn);
+
+      const systems = ['chem', 'lab', 'equip', 'equipBorrow'];
+      systems.forEach(s => {
+        const el = AUTH_DOM.get(`tab-container-${s}`);
+        if (el) el.classList.add('hidden');
+      });
+      const datalistContainer = AUTH_DOM.get('tab-container-datalist');
+      if (datalistContainer) datalistContainer.classList.add('hidden');
+
+      if (view === 'apply') {
+        const activeSys = AUTH_DOM.get(`tab-container-${AppState.currentSystemTab}`);
+        if (activeSys) activeSys.classList.remove('hidden');
+        systems.forEach(s => {
+          const el = AUTH_DOM.get(`view-apply-${s}`);
+          if (el) {
+            if (s === AppState.currentSystemTab) el.classList.remove('hidden');
+            else el.classList.add('hidden');
+          }
+        });
+      } else if (view === 'user-list' || view === 'admin') {
+        if (datalistContainer) datalistContainer.classList.remove('hidden');
+        const isDatalistContainer = AUTH_DOM.get('view-datalist-container');
+        if (isDatalistContainer) isDatalistContainer.classList.remove('hidden');
+        if (typeof renderDatalist === 'function') renderDatalist(view, AppState.currentSystemTab);
+      }
+    } catch (err) {
+      alert('switchView error: ' + err.stack);
+    }
+  }
+
+  /**
+   * 表單頁籤切換器
+   * 用於在不同系統表單 (藥品、設備、借用、實驗室) 之間進行切換，並自動載入對應表單的 UI 狀態。
+   * @param {string} formId - 目標表單 ID ('chem', 'equip', 'equipBorrow', 'lab')
+   */
+  function switchApplyForm(formId) {
+    try {
+      AppState.currentSystemTab = formId;
+      const forms = ['chem', 'lab', 'equip', 'equipBorrow'];
+      forms.forEach(id => {
+        const containerEl = AUTH_DOM.get('tab-container-' + id);
+        const btnEl = AUTH_DOM.get('btn-apply-' + id);
+        if (containerEl) containerEl.classList.add('hidden');
+        if (btnEl) {
+          btnEl.classList.remove('bg-blue-50', 'text-blue-700', 'font-semibold');
+          btnEl.classList.add('text-slate-600', 'hover:bg-slate-50');
+        }
+      });
+
+      const activeContainer = AUTH_DOM.get('tab-container-' + formId);
+      const activeBtn = AUTH_DOM.get('btn-apply-' + formId);
+      if (activeContainer) activeContainer.classList.remove('hidden');
+      if (activeBtn) {
+        activeBtn.classList.remove('text-slate-600', 'hover:bg-slate-50');
+        activeBtn.classList.add('bg-blue-50', 'text-blue-700', 'font-semibold');
+      }
+
+      if (window.currentAuthRole === 'student') {
+        const warnEl = AUTH_DOM.get('login-warning');
+        if (warnEl) {
+          if (formId === 'lab' || formId === 'equipBorrow') warnEl.classList.add('hidden');
+          else warnEl.classList.remove('hidden');
+        }
+      }
+
+      switchView('apply');
+    } catch (err) {
+      alert('switchApplyForm error: ' + err.stack);
+    }
+  }
+
+  /**
+   * 判斷當前視窗是否為直立的手機/平板模式
+   * @returns {boolean} 是否為行動版直立模式
+   */
+  function isMobilePortrait() {
+    return window.innerWidth < 768 && window.innerHeight >= window.innerWidth;
+  }
+
+  /**
+   * 切換側邊欄 (Sidebar) 的展開與收合狀態
+   * 根據電腦版或手機版有不同的動畫與排版變更邏輯
+   */
+  function toggleSidebar() {
+    const sidebar = AUTH_DOM.get('sidebar-container');
+    const title = AUTH_DOM.get('sidebar-title');
+    const texts = document.querySelectorAll('.sidebar-text');
+    const header = AUTH_DOM.get('sidebar-header');
+    const list = AUTH_DOM.get('sidebar-list') || document.querySelector('#sidebar-container ul');
+
+    if (isMobilePortrait()) {
+      if (!list || list.classList.contains('hidden')) {
+        if (list) list.classList.remove('hidden');
+        if (header) { header.classList.add('mb-4', 'border-b', 'pb-2'); }
+      } else {
+        if (list) list.classList.add('hidden');
+        if (header) { header.classList.remove('mb-4', 'border-b', 'pb-2'); }
+      }
+    } else {
+      if (sidebar.classList.contains('md:w-64') || sidebar.classList.contains('landscape:w-64')) {
+        sidebar.classList.remove('md:w-64', 'landscape:w-64');
+        sidebar.classList.add('md:w-20', 'landscape:w-20');
+        if (title) title.classList.add('hidden');
+        if (header) { header.classList.remove('px-1'); header.classList.add('justify-center'); }
+        texts.forEach(el => { el.classList.add('opacity-0'); setTimeout(() => el.classList.add('hidden'), 150); });
+        document.querySelectorAll('#sidebar-container ul button').forEach(btn => {
+          btn.classList.add('justify-center'); btn.classList.remove('px-3'); btn.classList.add('px-0');
+        });
+      } else {
+        sidebar.classList.remove('md:w-20', 'landscape:w-20');
+        sidebar.classList.add('md:w-64', 'landscape:w-64');
+        if (title) title.classList.remove('hidden');
+        if (header) { header.classList.remove('justify-center'); header.classList.add('px-1'); }
+        texts.forEach(el => { el.classList.remove('hidden'); setTimeout(() => el.classList.remove('opacity-0'), 10); });
+        document.querySelectorAll('#sidebar-container ul button').forEach(btn => {
+          btn.classList.remove('justify-center'); btn.classList.remove('px-0'); btn.classList.add('px-3');
+        });
+      }
+    }
+  }
+
+  let _lastMobilePortrait = isMobilePortrait();
+  window.addEventListener('resize', () => {
+    const nowPortrait = isMobilePortrait();
+    if (nowPortrait !== _lastMobilePortrait) {
+      _lastMobilePortrait = nowPortrait;
+      const sidebar = AUTH_DOM.get('sidebar-container');
+      const title = AUTH_DOM.get('sidebar-title');
+      const texts = document.querySelectorAll('.sidebar-text');
+      const header = AUTH_DOM.get('sidebar-header');
+      const list = AUTH_DOM.get('sidebar-list') || document.querySelector('#sidebar-container ul');
+
+      if (nowPortrait) {
+        if (sidebar) { sidebar.classList.remove('md:w-20', 'landscape:w-20'); sidebar.classList.add('md:w-64', 'landscape:w-64'); }
+        if (title) title.classList.remove('hidden');
+        if (header) { header.classList.remove('justify-center'); header.classList.add('px-1'); }
+        texts.forEach(el => { el.classList.remove('hidden', 'opacity-0'); });
+        document.querySelectorAll('#sidebar-container ul button').forEach(btn => {
+          btn.classList.remove('justify-center', 'px-0'); btn.classList.add('px-3');
+        });
+      } else {
+        if (list) list.classList.remove('hidden');
+        if (header) header.classList.add('mb-4', 'border-b', 'pb-2');
+      }
+    }
+  });
+
+  // ==========================================
+  // 全域初始化邏輯 (執行於 js-auth 與 js-switch 皆已載入後)
+  // ==========================================
+  setupUI({ loggedIn: false, role: 'guest', loginUrl: '' });
+  hideLoadingOverlay();
+
+  ApiService.auth.getLoginUrl()
+    .then(url => {
+      window.cachedLoginUrl = url;
+      const btnAuth = document.getElementById('btn-login-logout');
+      if (btnAuth && btnAuth.innerText === '登入') btnAuth.href = url;
+    })
+    .catch(err => console.warn('Failed to get initial login url:', err));
+
+  if (typeof checkAuthStatus === 'function') {
+    const storedToken = typeof getToken === 'function' ? getToken() : null;
+    if ((typeof templateSessionToken !== 'undefined' && templateSessionToken) || storedToken) {
+      checkAuthStatus();
+    }
+  }
+</script>

@@ -20,7 +20,7 @@
       </ol>
     </div>
   </details>
-  <form id="equipBorrowForm" onsubmit="handleEquipBorrowFormSubmit(event)" class="space-y-5">
+  <form id="equipBorrowForm" onsubmit="handleGenericSubmit(event, 'equipBorrow')" class="space-y-5">
     <div>
       <label class="block text-sm font-semibold text-slate-700 mb-1">借用人 <span class="text-red-500">*</span></label>
       <input type="text" id="equipBorrow_applicant" name="applicant" required readonly
@@ -80,7 +80,7 @@
             class="mt-2 px-4 py-1.5 bg-slate-200 hover:bg-slate-300 rounded-md text-sm text-slate-700 font-medium transition">選擇檔案</button>
         </div>
 
-        <div id="equipBorrow_preview-container" class="hidden relative inline-block mt-2">
+        <div id="equipBorrow_preview-container" class="hidden relative mt-2">
           <img id="equipBorrow_image-preview" src="" alt="圖片預覽"
             class="max-h-48 rounded shadow-sm border border-slate-200 object-contain">
           <button type="button" id="equipBorrow_btn-remove-image" onclick="removeImage(event, 'equipBorrow')"

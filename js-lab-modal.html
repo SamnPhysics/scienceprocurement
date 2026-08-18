@@ -1,9 +1,9 @@
 <script>
   // ==========================================
-  // js-lab-modal.html — 實驗室預約模組：Modal 控制
-  // 職責：三個 Modal（新增預約/單日明細/週課表）、週導覽、列印、提交
-  // 使用優化A的 filterBookingsByRoomAndDate、優化D的 DocumentFragment
-  // 載入順序：依賴 js-lab-core.html、js-lab-render.html
+  // Module: js-lab-modal.html
+  // Responsibility: 負責實驗室模組的三大彈窗邏輯：新增預約 (Modal 1)、單日明細 (Modal 2)、教室週課表與列印 (Modal 3)。處理資料提交與取消預約流程。
+  // Dependencies: js-lab-core.html, js-lab-render.html
+  // Exports: openLabNewBookingModal, openLabModal, closeLabModal, openLabWeekDetailsModal, closeLabWeekDetailsModal, openLabRoomScheduleModal, closeLabRoomScheduleModal, changeRoomScheduleWeek, jumpToRoomScheduleDate, printLabRoomSchedule, submitLabBookingForm, showLabBookingDetailModal
   // ==========================================
 
   // Modal 狀態
@@ -12,14 +12,26 @@
 
   // ========== Modal 1: 新增預約表單 ==========
 
+  /**
+   * 開啟「新增預約」彈窗 (空白表單)
+   * 預設帶入當前的時間與日期
+   */
   function openLabNewBookingModal() {
     const now = new Date();
     let h = now.getHours();
-    if (h < LAB_START_HOUR) h = LAB_START_HOUR;
-    if (h >= LAB_END_HOUR) h = LAB_END_HOUR - 1;
-    openLabModal('', `${String(h).padStart(2, '0')}:00`, `${String(h + 1).padStart(2, '0')}:00`, getLabLocalIsoDate(labCurrentDate));
+    if (h < LabState.config.startHour) h = LabState.config.startHour;
+    if (h >= LabState.config.endHour) h = LabState.config.endHour - 1;
+    openLabModal('', `${String(h).padStart(2, '0')}:00`, `${String(h + 1).padStart(2, '0')}:00`, getLabLocalIsoDate(LabState.currentDate));
   }
 
+  /**
+   * 開啟並初始化「新增預約」彈窗
+   * 根據傳入的參數自動選取教室、日期，並智能勾選對應的時段節次。
+   * @param {string} [roomId=''] - 預先選取的實驗室 ID
+   * @param {string} [startTime=''] - 預估起始時間 (HH:mm)
+   * @param {string} [endTime=''] - 預估結束時間 (HH:mm)
+   * @param {string} [targetDate=''] - 目標日期 (YYYY-MM-DD)
+   */
   function openLabModal(roomId = '', startTime = '', endTime = '', targetDate = '') {
     const modal = document.getElementById('booking-modal');
     const modalContent = document.getElementById('booking-modal-content');
@@ -41,7 +53,7 @@
     if (targetDate && targetDate.includes('-')) {
       document.getElementById('modal-date').value = targetDate.trim();
     } else {
-      document.getElementById('modal-date').value = getLabLocalIsoDate(labCurrentDate);
+      document.getElementById('modal-date').value = getLabLocalIsoDate(LabState.currentDate);
     }
 
     // 清空基本欄位
@@ -51,26 +63,35 @@
     document.getElementById('modal-chemicals').value = '';
     document.getElementById('modal-equipment').value = '';
 
-    // 根據登入帳號自動帶入姓名與控制文字框屬性
+    // 根據登入帳號自動帶入姓名與控制文字框屬性，以及權限限制
     const teacherInput = document.getElementById('modal-teacher');
     const studentInput = document.getElementById('modal-student');
-    const activeName = currentUserDisplayName || (currentUserEmail ? currentUserEmail.split('@')[0] : '');
+    const recurringCheckbox = document.getElementById('modal-is-recurring');
+    const recurringLabel = recurringCheckbox ? recurringCheckbox.closest('label') : null;
+    const endDateContainer = document.getElementById('modal-end-date-container');
+
+    const activeName = AppState.currentUserDisplayName || (AppState.currentUserEmail ? AppState.currentUserEmail.split('@')[0] : '');
     const READONLY_CLASS = "w-full border border-gray-300 rounded-lg p-2 bg-gray-100 text-gray-600 cursor-not-allowed focus:outline-none";
     const EDITABLE_CLASS = "w-full border border-gray-300 rounded-lg p-2 bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none";
     const NOT_LOGIN_CLASS = "w-full border border-gray-300 rounded-lg p-2 bg-gray-100 text-gray-500 cursor-not-allowed focus:outline-none";
 
-    if (!currentUserEmail || currentUserEmail.trim() === '') {
+    if (!AppState.currentUserEmail || AppState.currentUserEmail.trim() === '') {
       // 尚未登入
       if (teacherInput) { teacherInput.value = '尚未登入'; teacherInput.readOnly = true; teacherInput.className = NOT_LOGIN_CLASS; }
       if (studentInput) { studentInput.value = '尚未登入'; studentInput.readOnly = true; studentInput.className = NOT_LOGIN_CLASS; }
-    } else if (isStudentAccount(currentUserEmail)) {
-      // 學生帳號：申請學生填自己，申請教師可輸入
+      if (recurringLabel) recurringLabel.style.display = 'none';
+    } else if (isStudentAccount(AppState.currentUserEmail)) {
+      // 學生帳號：申請學生填自己，申請教師可輸入；學生禁止使用週期性預約
       if (studentInput) { studentInput.value = activeName; studentInput.readOnly = true; studentInput.className = READONLY_CLASS; }
       if (teacherInput) { teacherInput.value = ''; teacherInput.readOnly = false; teacherInput.placeholder = "請輸入指導教師姓名"; teacherInput.className = EDITABLE_CLASS; }
+      if (recurringLabel) recurringLabel.style.display = 'none';
+      if (recurringCheckbox) recurringCheckbox.checked = false;
+      if (endDateContainer) endDateContainer.classList.add('hidden');
     } else {
-      // 教師帳號：申請教師填自己，申請學生可輸入
+      // 教師/管理員帳號：申請教師填自己，申請學生可輸入；可使用週期性預約
       if (teacherInput) { teacherInput.value = activeName; teacherInput.readOnly = true; teacherInput.className = READONLY_CLASS; }
       if (studentInput) { studentInput.value = '無'; studentInput.readOnly = false; studentInput.placeholder = "學生姓名(無則帶入「無」)"; studentInput.className = EDITABLE_CLASS; }
+      if (recurringLabel) recurringLabel.style.display = 'flex';
     }
 
     // 3. 根據起訖時間自動勾選節次
@@ -116,6 +137,9 @@
     }, 10);
   }
 
+  /**
+   * 關閉「新增預約」彈窗，並播放漸隱動畫
+   */
   function closeLabModal() {
     const modal = document.getElementById('booking-modal');
     const modalContent = document.getElementById('booking-modal-content');
@@ -127,11 +151,18 @@
 
   // ========== Modal 2: 單日明細列表 ==========
 
+  /**
+   * 開啟「單日明細」彈窗
+   * 用於在週視圖點擊有預約的日期時，顯示該日所有的預約卡片清單。
+   * @param {string} roomId - 房間 ID
+   * @param {string} dayName - 星期幾 (例如: 週一)
+   * @param {string} targetDateIso - 目標日期 (YYYY-MM-DD)
+   */
   function openLabWeekDetailsModal(roomId, dayName, targetDateIso) {
-    const room = labRooms.find(r => r.id === roomId) || { name: '該實驗室', id: roomId };
+    const room = LabState.rooms.find(r => r.id === roomId) || { name: '該實驗室', id: roomId };
 
     // 使用優化A的共用過濾函數
-    const dayBookings = filterBookingsByRoomAndDate(labBookings, room, targetDateIso);
+    const dayBookings = filterBookingsByRoomAndDate(LabState.bookings, room, targetDateIso);
 
     document.getElementById('detail-modal-title').innerText = `${room.name} - ${dayName} (${targetDateIso})`;
     document.getElementById('detail-modal-subtitle').innerText = `當日共有 ${dayBookings.length} 筆預約`;
@@ -142,7 +173,14 @@
     if (dayBookings.length === 0) {
       listContainer.innerHTML = renderTemplate('lab-day-no-bookings-template');
     } else {
-      dayBookings.sort((a, b) => (a.start || '00:00').localeCompare(b.start || '00:00'));
+      dayBookings.sort((a, b) => {
+        const getMins = t => {
+          if (!t) return 0;
+          const p = t.split(':');
+          return (parseInt(p[0], 10) || 0) * 60 + (parseInt(p[1], 10) || 0);
+        };
+        return getMins(a.start) - getMins(b.start);
+      });
       // 優化D：用 DocumentFragment 批次建立明細卡片
       const frag = document.createDocumentFragment();
       dayBookings.forEach(b => {
@@ -155,7 +193,7 @@
           end: b.end || '',
           user: maskName(b.user || '無'),
           courseType: String(b.courseType || '').trim() || '無',
-          className: String(b.className || b.class || '').trim() || '無',
+          className: String(b.className || b['class'] || '').trim() || '無',
           periodsBadge: periodsBadgeHtml,
           chemicals: b.chemicals || '無',
           equipment: b.equipment || '無'
@@ -172,6 +210,9 @@
     setTimeout(() => { modal.classList.remove('opacity-0'); content.classList.remove('scale-95'); content.classList.add('scale-100'); }, 10);
   }
 
+  /**
+   * 關閉「單日明細」彈窗，並播放漸隱動畫
+   */
   function closeLabWeekDetailsModal() {
     const modal = document.getElementById('week-details-modal');
     const content = document.getElementById('week-details-modal-content');
@@ -183,9 +224,13 @@
 
   // ========== Modal 3: 單一教室週課表 + 週導覽 + 列印 ==========
 
+  /**
+   * 開啟「單一教室週課表」彈窗
+   * @param {string} roomId - 欲查看的房間 ID
+   */
   function openLabRoomScheduleModal(roomId) {
     currentRoomScheduleRoomId = roomId;
-    currentRoomScheduleBaseDate = new Date(labCurrentDate);
+    currentRoomScheduleBaseDate = new Date(LabState.currentDate);
     renderLabRoomScheduleContent();
 
     const modal = document.getElementById('room-week-schedule-modal');
@@ -195,6 +240,9 @@
     setTimeout(() => { modal.classList.remove('opacity-0'); content.classList.remove('scale-95'); content.classList.add('scale-100'); }, 10);
   }
 
+  /**
+   * 關閉「單一教室週課表」彈窗，並播放漸隱動畫
+   */
   function closeLabRoomScheduleModal() {
     const modal = document.getElementById('room-week-schedule-modal');
     const content = document.getElementById('room-week-schedule-modal-content');
@@ -204,10 +252,13 @@
     setTimeout(() => { modal.classList.add('hidden'); modal.classList.remove('flex'); }, 200);
   }
 
-  // 週導覽：前一週/本週/下一週
+  /**
+   * 週課表內的導覽功能：切換前一週 / 本週 / 下一週
+   * @param {number} offset - 位移量 (+1, -1, 或 0 代表本週)
+   */
   function changeRoomScheduleWeek(offset) {
     if (!currentRoomScheduleRoomId) return;
-    if (!currentRoomScheduleBaseDate) currentRoomScheduleBaseDate = new Date(labCurrentDate);
+    if (!currentRoomScheduleBaseDate) currentRoomScheduleBaseDate = new Date(LabState.currentDate);
     if (offset === 0) {
       currentRoomScheduleBaseDate = new Date();
     } else {
@@ -216,7 +267,10 @@
     renderLabRoomScheduleContent();
   }
 
-  // 小月表日曆直接跳轉
+  /**
+   * 週課表內的日期選擇器跳轉功能
+   * @param {string} dateStr - 選擇的日期 (YYYY-MM-DD)
+   */
   function jumpToRoomScheduleDate(dateStr) {
     if (!currentRoomScheduleRoomId || !dateStr) return;
     const parts = String(dateStr).trim().split('-');
@@ -226,9 +280,14 @@
     }
   }
 
+  /**
+   * 渲染「單一教室週課表」的網格內容
+   * 使用 DocumentFragment 優化 DOM 插入操作 (優化D)
+   * @private
+   */
   function renderLabRoomScheduleContent() {
     if (!currentRoomScheduleRoomId) return;
-    const room = labRooms.find(r => r.id === currentRoomScheduleRoomId) || { name: '該實驗室', id: currentRoomScheduleRoomId };
+    const room = LabState.rooms.find(r => r.id === currentRoomScheduleRoomId) || { name: '該實驗室', id: currentRoomScheduleRoomId };
     const days = ['週一', '週二', '週三', '週四', '週五'];
     const dayNames = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
 
@@ -283,7 +342,7 @@
     const timeCol = document.createElement('div');
     timeCol.className = 'w-16 shrink-0 border-r border-gray-200 flex flex-col bg-white relative';
     const timeFrag = document.createDocumentFragment();
-    for (let i = LAB_START_HOUR; i < LAB_END_HOUR; i++) {
+    for (let i = LabState.config.startHour; i < LabState.config.endHour; i++) {
       const timeSlot = document.createElement('div');
       timeSlot.className = 'border-b border-gray-100 flex items-start justify-end pr-2 pt-1 text-xs text-gray-400 font-medium';
       timeSlot.style.height = `${HOUR_HEIGHT_PX}px`;
@@ -302,7 +361,7 @@
 
       // 時段格子（優化D）：改為各時段獨立偵測與發動預約，比照日檢視表效果
       const slotFrag = document.createDocumentFragment();
-      for (let i = LAB_START_HOUR; i < LAB_END_HOUR; i++) {
+      for (let i = LabState.config.startHour; i < LabState.config.endHour; i++) {
         const startT = `${String(i).padStart(2, '0')}:00`;
         const endT = `${String(i + 1).padStart(2, '0')}:00`;
         const slot = document.createElement('div');
@@ -321,12 +380,12 @@
       dayCol.appendChild(slotFrag);
 
       // 使用優化A的共用過濾函數
-      const dayBookings = filterBookingsByRoomAndDate(labBookings, room, colIso);
+      const dayBookings = filterBookingsByRoomAndDate(LabState.bookings, room, colIso);
 
       dayBookings.forEach(b => {
         const [startH, startM] = (b.start || '08:00').split(':').map(Number);
         const [endH, endM] = (b.end || '09:00').split(':').map(Number);
-        const topPx = (startH - LAB_START_HOUR + startM / 60) * HOUR_HEIGHT_PX;
+        const topPx = (startH - LabState.config.startHour + startM / 60) * HOUR_HEIGHT_PX;
         const heightPx = ((endH - startH) + (endM - startM) / 60) * HOUR_HEIGHT_PX;
 
         const block = document.createElement('div');
@@ -341,7 +400,7 @@
           const userBadgeHtml = heightPx > 60 ? renderTemplate('lab-room-schedule-user-badge-template', {
             user: maskName(b.user || '無'),
             courseType: String(b.courseType || '').trim() || '無',
-            className: String(b.className || b.class || '').trim() || '無'
+            className: String(b.className || b['class'] || '').trim() || '無'
           }) : '';
           block.innerHTML = renderTemplate('lab-room-schedule-block-normal-template', {
             start: b.start || '',
@@ -353,8 +412,7 @@
 
         block.onclick = (e) => {
           e.stopPropagation();
-          const detailMsg = `地點：${room.name}\n課程內容：${b.title}\n預約老師/對象：${maskName(b.user)}\n課程型態：${String(b.courseType || '').trim() || '無'}\n使用班級：${String(b.className || b.class || '').trim() || '無'}\n使用節次：${b.periodsList || '全日'}\n日期時間：${b.date} (${b.start} - ${b.end})\n實驗所需化學藥品：${b.chemicals || '無'}\n實驗所需器材：${b.equipment || '無'}`;
-          alert(detailMsg, "實驗室/教室 預約明細", { booking: b });
+          showLabBookingDetailModal(b, room);
         };
 
         dayCol.appendChild(block);
@@ -366,12 +424,16 @@
 
   // ========== 列印本頁功能 ==========
 
+  /**
+   * 列印目前的「單一教室週課表」
+   * 將目前的預約資料套用列印樣板 (lab-schedule-print-template)，並開啟新視窗呼叫瀏覽器列印功能
+   */
   function printLabRoomSchedule() {
     if (!currentRoomScheduleRoomId) return;
-    const room = labRooms.find(r => r.id === currentRoomScheduleRoomId) || { name: '自然科實驗室', id: currentRoomScheduleRoomId };
+    const room = LabState.rooms.find(r => r.id === currentRoomScheduleRoomId) || { name: '自然科實驗室', id: currentRoomScheduleRoomId };
     const days = ['週一', '週二', '週三', '週四', '週五'];
 
-    const baseDate = currentRoomScheduleBaseDate ? new Date(currentRoomScheduleBaseDate) : new Date(labCurrentDate);
+    const baseDate = currentRoomScheduleBaseDate ? new Date(currentRoomScheduleBaseDate) : new Date(LabState.currentDate);
     let dayOfWeek = baseDate.getDay();
     if (dayOfWeek === 0) dayOfWeek = 7;
     const monday = new Date(baseDate);
@@ -392,22 +454,22 @@
       headerCellsHtml += `<th style="border: 1px solid #000; padding: 8px 4px; width: 16.5%;">${days[i]}<br><span style="font-size: 11pt; font-weight: normal;">(${d.getMonth() + 1}/${d.getDate()})</span></th>`;
     }
 
-    const numHours = LAB_END_HOUR - LAB_START_HOUR;
+    const numHours = LabState.config.endHour - LabState.config.startHour;
     let columnsData = [];
     for (let d = 0; d < 5; d++) {
       let colGrid = new Array(numHours).fill(null);
       const colIso = weekDatesIso[d];
 
       // 使用優化A的共用過濾函數
-      const dayBookings = filterBookingsByRoomAndDate(labBookings, room, colIso);
+      const dayBookings = filterBookingsByRoomAndDate(LabState.bookings, room, colIso);
 
       dayBookings.forEach(b => {
         const [startH, startM] = (b.start || '08:00').split(':').map(Number);
         const [endH, endM] = (b.end || '09:00').split(':').map(Number);
-        let idx = startH - LAB_START_HOUR;
+        let idx = startH - LabState.config.startHour;
         if (idx < 0) idx = 0;
         if (idx >= numHours) idx = numHours - 1;
-        let endIdx = Math.ceil((endH * 60 + (endM || 0) - (LAB_START_HOUR * 60)) / 60);
+        let endIdx = Math.ceil((endH * 60 + (endM || 0) - (LabState.config.startHour * 60)) / 60);
         if (endIdx <= idx) endIdx = idx + 1;
         let span = endIdx - idx;
         if (idx + span > numHours) span = numHours - idx;
@@ -421,8 +483,8 @@
     }
 
     let tbodyRowsHtml = '';
-    for (let h = LAB_START_HOUR; h < LAB_END_HOUR; h++) {
-      let rIndex = h - LAB_START_HOUR;
+    for (let h = LabState.config.startHour; h < LabState.config.endHour; h++) {
+      let rIndex = h - LabState.config.startHour;
       let trHtml = `<tr><td style="border: 1px solid #000; padding: 6px 4px; text-align: center; font-weight: bold; background-color: #f8f8f8; font-size: 11pt;">${String(h).padStart(2, '0')}:00 - ${String(h + 1).padStart(2, '0')}:00</td>`;
       for (let d = 0; d < 5; d++) {
         let cellData = columnsData[d][rIndex];
@@ -436,7 +498,7 @@
               <div style="font-size: 11.5pt; color: #111; font-weight: bold; margin-top: 2px;">${b.title}</div>
               <div style="font-size: 10pt; color: #0056b3; margin-top: 2px;">申請：${maskName(b.user || '無')}</div>
               ${(b.courseType && b.courseType !== '無') ? `<div style="font-size: 9.5pt; color: #444; margin-top: 1px;">型態：${b.courseType}</div>` : ''}
-              ${(b.className || b.class) ? `<div style="font-size: 9.5pt; color: #444; margin-top: 1px;">班級：${b.className || b.class}</div>` : ''}
+              ${(b.className || b['class']) ? `<div style="font-size: 9.5pt; color: #444; margin-top: 1px;">班級：${b.className || b['class']}</div>` : ''}
               ${b.periodsList ? `<div style="font-size: 9pt; color: #666; margin-top: 1px;">(${b.periodsList})</div>` : ''}
             </div>
           `).join('<hr style="border: 0; border-top: 1px dashed #888; margin: 6px 0;">');
@@ -466,8 +528,13 @@
 
   // ========== 預約提交 ==========
 
-  function submitLabBookingForm() {
-    const emailVal = (currentUserEmail || '').toLowerCase();
+  /**
+   * 送出「新增預約」表單
+   * 收集輸入資料，發送至後端並處理衝堂錯誤或成功訊息。成功後會自動刷新資料。
+   * @returns {Promise<void>}
+   */
+  window.submitLabBookingForm = async function() {
+    const emailVal = (AppState.currentUserEmail || '').toLowerCase();
     if (!emailVal || !emailVal.endsWith('@' + allowedDomain)) {
       alert('請先登入 @' + allowedDomain + ' 帳號後再送出預約。');
       return;
@@ -515,34 +582,217 @@
       isRecurring: isRecurring, endDate: endDate
     };
 
-    if (typeof google !== 'undefined' && google.script) {
-      const btn = document.getElementById('lab_submitBtn');
-      const oldText = btn ? btn.innerText : '';
-      if (btn) { btn.innerText = '處理中...'; btn.disabled = true; }
+    const btn = document.getElementById('lab_submitBtn');
+    const oldText = btn ? btn.innerText : '';
+    if (btn) { btn.innerText = '處理中...'; btn.disabled = true; }
 
-      google.script.run
-        .withSuccessHandler(function (res) {
-          if (res && res.conflicts && res.conflicts.length > 0) {
-            const conflictMsgs = res.conflicts.map(c => c.date + ' ' + c.period).join('\n');
-            alert("預約已處理！\n\n注意：以下時段因衝堂已被跳過未預約：\n" + conflictMsgs);
-          } else {
-            alert("預約成功！");
-          }
-          if (window.SystemCache) window.SystemCache.invalidate('labData');
-          fetchLabBackendData();
-          closeLabModal();
-          if (btn) { btn.innerText = oldText; btn.disabled = false; }
-        })
-        .withFailureHandler(function (error) {
-          alert("預約失敗: " + error);
-          if (btn) { btn.innerText = oldText; btn.disabled = false; }
-        })
-        .submitLabBooking(newBooking, getToken());
-    } else {
-      alert("已收集表單資料 (本地測試):\n" + JSON.stringify(newBooking, null, 2));
+    try {
+      const res = await ApiService.lab.submitBooking(newBooking, getToken());
+      
+      if (res && res.conflicts && res.conflicts.length > 0) {
+        const conflictMsgs = res.conflicts.map(c => c.date + ' ' + c.period).join('\n');
+        alert("預約已處理！\n\n注意：以下時段因衝堂已被跳過未預約：\n" + conflictMsgs);
+      } else {
+        alert("預約成功！");
+      }
+      
+      if (window.SystemCache) window.SystemCache.invalidate('labData');
+      if (typeof fetchLabBackendData === 'function') fetchLabBackendData();
       closeLabModal();
+      if (btn) { btn.innerText = oldText; btn.disabled = false; }
+    } catch (error) {
+      alert("預約失敗: " + (error.message || error));
+      if (btn) { btn.innerText = oldText; btn.disabled = false; }
     }
   }
+
+  // ========== 取消預約 ==========
+  
+  /**
+   * 處理取消預約的流程
+   * 支援單次取消與週期性系列取消，包含自定義對話框的二次確認與後端 API 呼叫。
+   * @param {Object} booking - 預約資料物件
+   * @returns {Promise<void>}
+   */
+  async function handleCancelLabBooking(booking) {
+    const dialog = document.getElementById('custom-alert-dialog');
+    
+    let cancelMode = 'abort';
+    
+    if (booking.groupId) {
+      // 週期性預約的確認視窗
+      cancelMode = await new Promise((resolve) => {
+        let recDialog = document.getElementById('recurring-cancel-dialog');
+        if (!recDialog) {
+          const html = `
+            <dialog id="recurring-cancel-dialog" class="backdrop:bg-slate-900/50 backdrop:backdrop-blur-sm rounded-xl shadow-2xl p-0 border-0 m-auto min-w-[320px] max-w-md w-full transition-all duration-200 transform scale-95 opacity-0">
+              <div class="bg-white rounded-xl overflow-hidden">
+                <div class="px-6 py-5">
+                  <div class="flex items-center gap-3 text-rose-600 mb-3">
+                    <i class="fa-solid fa-triangle-exclamation text-xl"></i>
+                    <h3 class="text-lg font-semibold text-slate-900">取消週期性預約</h3>
+                  </div>
+                  <p class="text-slate-600 mb-2">此預約為週期性預約的一部分。</p>
+                  <p class="text-slate-600 text-sm">請問您要僅取消「這一次」的預約，還是要取消「未來的所有」關聯預約？此動作無法復原。</p>
+                </div>
+                <div class="px-6 py-4 bg-slate-50 flex flex-col gap-2">
+                  <button type="button" id="rec-cancel-series-btn" class="w-full px-4 py-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700 transition font-medium shadow-sm">取消全部 (未來所有關聯預約)</button>
+                  <button type="button" id="rec-cancel-single-btn" class="w-full px-4 py-2 bg-slate-200 text-slate-800 rounded-lg hover:bg-slate-300 transition font-medium">僅取消本次</button>
+                  <button type="button" id="rec-cancel-abort-btn" class="w-full px-4 py-2 mt-2 text-slate-500 hover:text-slate-700 transition font-medium">不取消 (返回)</button>
+                </div>
+              </div>
+            </dialog>
+          `;
+          document.body.insertAdjacentHTML('beforeend', html);
+          recDialog = document.getElementById('recurring-cancel-dialog');
+        }
+        
+        const closeDiag = (res) => {
+          recDialog.classList.remove('opacity-100', 'scale-100');
+          recDialog.classList.add('opacity-0', 'scale-95');
+          setTimeout(() => { if (recDialog.open) recDialog.close(); resolve(res); }, 200);
+        };
+        
+        document.getElementById('rec-cancel-series-btn').onclick = () => closeDiag('series');
+        document.getElementById('rec-cancel-single-btn').onclick = () => closeDiag('single');
+        document.getElementById('rec-cancel-abort-btn').onclick = () => closeDiag('abort');
+        
+        recDialog.showModal();
+        void recDialog.offsetWidth; // 觸發 reflow 確保動畫執行
+        recDialog.classList.remove('opacity-0', 'scale-95');
+        recDialog.classList.add('opacity-100', 'scale-100');
+      });
+      if (cancelMode === 'abort') return;
+    } else {
+      const isConfirmed = await showConfirm(`您確定要取消「${booking.title}」於 ${booking.date} (${booking.start}-${booking.end}) 的預約嗎？此動作無法復原。`);
+      if (!isConfirmed) return;
+      cancelMode = 'single';
+    }
+
+    const cancelBtn = document.getElementById('custom-alert-cancel-booking-btn');
+    if (cancelBtn) { cancelBtn.textContent = '處理中...'; cancelBtn.disabled = true; }
+
+    try {
+      const res = await ApiService.lab.cancelBooking(booking.rowNumber, getToken(), cancelMode === 'series');
+      
+      if (cancelBtn) { cancelBtn.textContent = '取消預約'; cancelBtn.disabled = false; }
+      if (dialog) {
+        dialog.classList.remove('opacity-100', 'scale-100');
+        dialog.classList.add('opacity-0', 'scale-95');
+        if (dialog.open) dialog.close();
+      }
+      
+      if (res.success) {
+        alert(cancelMode === 'series' ? '已成功取消該系列未來的所有教室預約！' : '已成功取消該次教室預約！');
+        if (typeof fetchLabBackendData === 'function') fetchLabBackendData();
+      } else {
+        alert('取消失敗：' + (res.message || '未知錯誤'));
+      }
+    } catch (err) {
+      if (cancelBtn) { cancelBtn.textContent = '取消預約'; cancelBtn.disabled = false; }
+      alert('連線失敗，無法取消：' + (err.message || err));
+    }
+  }
+
+  // ========== 預約明細彈窗 (Template 化) ==========
+  /**
+   * 顯示單筆預約的詳細資訊彈窗 (支援由日視圖、週課表或明細清單中點擊觸發)
+   * 若登入者為管理員或該預約擁有者，則允許執行取消動作。
+   * @param {Object} booking - 預約資料物件
+   * @param {Object} room - 房間資料物件
+   */
+  window.showLabBookingDetailModal = function(booking, room) {
+    let dialog = document.getElementById('lab-booking-detail-dialog');
+    if (!dialog) {
+      const dialogHtml = `
+        <dialog id="lab-booking-detail-dialog" class="rounded-2xl shadow-2xl border border-slate-200 p-0 max-w-lg w-full bg-white overflow-hidden transition-all duration-200 opacity-0 scale-95" closedby="any"></dialog>
+      `;
+      document.body.insertAdjacentHTML('beforeend', dialogHtml);
+      dialog = document.getElementById('lab-booking-detail-dialog');
+    }
+
+    const email = (typeof AppState.currentUserEmail !== 'undefined' ? AppState.currentUserEmail : (AppState.currentUserEmail || '')).toLowerCase().trim();
+    const displayName = (typeof AppState.currentUserDisplayName !== 'undefined' ? AppState.currentUserDisplayName : (AppState.currentUserDisplayName || (email ? email.split('@')[0] : ''))).toLowerCase().trim();
+    const role = window.currentAuthRole || 'guest';
+    const isAdmin = (role === 'admin');
+
+    const bEmail = String(booking.email || '').toLowerCase().trim();
+    const bTeacher = String(booking.teacher || '').toLowerCase().trim();
+    const bStudent = String(booking.student || '').toLowerCase().trim();
+    const bUser = String(booking.user || '').toLowerCase().trim();
+
+    const isOwner = email && (
+      (bEmail !== '' && bEmail === email) ||
+      (bUser !== '' && (bUser === displayName || bUser === email.split('@')[0])) ||
+      (bTeacher !== '' && (bTeacher === displayName || bTeacher === email.split('@')[0])) ||
+      (bStudent !== '' && (bStudent === displayName || bStudent === email.split('@')[0]))
+    );
+
+    const templateData = {
+      title: booking.title || '無標題',
+      roomName: room.name || '未知地點',
+      user: maskName(booking.user || '無'),
+      courseType: String(booking.courseType || '').trim() || '無',
+      className: String(booking.className || booking['class'] || '').trim() || '無',
+      date: booking.date || '',
+      start: booking.start || '',
+      end: booking.end || '',
+      periodsList: booking.periodsList || '全日',
+      chemicals: booking.chemicals || '無',
+      equipment: booking.equipment || '無'
+    };
+
+    dialog.innerHTML = renderTemplate('lab-booking-detail-modal-template', templateData);
+
+    const closeBtn = dialog.querySelector('#detail-modal-close-btn');
+    const xBtn = dialog.querySelector('#detail-modal-x-btn');
+    const cancelWrapper = dialog.querySelector('#detail-modal-cancel-wrapper');
+    const cancelBtn = dialog.querySelector('#detail-modal-cancel-btn');
+
+    if (isAdmin || isOwner) {
+      cancelWrapper.classList.remove('hidden');
+      cancelBtn.onclick = function() {
+        closeDialog();
+        if (typeof handleCancelLabBooking === 'function') {
+          handleCancelLabBooking(booking);
+        } else {
+          alert("發生錯誤：找不到取消功能的對應函式 (handleCancelLabBooking)。");
+        }
+      };
+    } else {
+      cancelWrapper.classList.add('hidden');
+      cancelBtn.onclick = null;
+    }
+
+    dialog.showModal();
+    void dialog.offsetWidth; // 觸發 reflow 確保動畫執行
+    dialog.classList.remove('opacity-0', 'scale-95');
+    dialog.classList.add('opacity-100', 'scale-100');
+
+    const closeDialog = function() {
+      dialog.classList.remove('opacity-100', 'scale-100');
+      dialog.classList.add('opacity-0', 'scale-95');
+      setTimeout(() => { if (dialog.open) dialog.close(); }, 200);
+    };
+
+    if (closeBtn) closeBtn.onclick = closeDialog;
+    if (xBtn) xBtn.onclick = closeDialog;
+    
+    dialog.onclose = () => {};
+    dialog.oncancel = () => {};
+
+    if (!('closedBy' in HTMLDialogElement.prototype)) {
+      dialog.onclick = function(event) {
+        if (event.target !== dialog) return;
+        const rect = dialog.getBoundingClientRect();
+        const isDialogContent = (
+          rect.top <= event.clientY && event.clientY <= rect.top + rect.height &&
+          rect.left <= event.clientX && event.clientX <= rect.left + rect.width
+        );
+        if (!isDialogContent) closeDialog();
+      };
+    }
+  };
 
   // 全域 Esc 鍵監聽，順序關閉目前開啟的實驗室模組視窗
   document.addEventListener('keydown', function (event) {
@@ -564,10 +814,21 @@
   // ========== 頁面初始化 ==========
   document.addEventListener('DOMContentLoaded', () => {
     if (document.getElementById('rooms-container')) {
-      updateLabDateDisplay(labCurrentView);
+      updateLabDateDisplay(LabState.currentView);
       renderLabTimeHeader();
       fetchLabBackendData();
       setInterval(updateLabCurrentTimeLine, 60000);
+    }
+    
+    // 綁定「週期性預約」的開關事件 (避免 GAS Sanitizer 解析 inline event 發生錯誤)
+    const recurringCheckbox = document.getElementById('modal-is-recurring');
+    if (recurringCheckbox) {
+      recurringCheckbox.addEventListener('change', function(e) {
+        const container = document.getElementById('modal-end-date-container');
+        if (container) {
+          container.classList.toggle('hidden', !e.target.checked);
+        }
+      });
     }
   });
 </script>

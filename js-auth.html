@@ -1,20 +1,25 @@
 <script>
   // ==========================================
-  // js-auth.html — 認證、登入登出、畫面路由
-  // 職責：checkAuthStatus、handleLogout、setupUI、switchView、switchApplyForm
-  // 載入順序：依賴 js-core.html
+  // Module: js-auth.html
+  // Responsibility: 處理使用者驗證流程，包含登入彈窗管理 (LoginManager)、權限狀態檢查 (checkAuthStatus) 與登出邏輯 (handleLogout)。
+  // Dependencies: js-core.html (提供 ApiService, getToken), js-switch.html (呼叫 setupUI)
+  // Exports: LoginManager, checkAuthStatus, handleLogout
   // ==========================================
 
-  const AUTH_DOM = {
-    get: id => document.getElementById(id),
-    safeSet: (id, val) => { const el = document.getElementById(id); if (el) el.value = val; }
-  };
-
+  /**
+   * @global
+   * @description 登入彈窗管理器 (LoginManager)
+   * 負責開啟 GAS 的 OAuth 登入彈窗，並透過 postMessage 或 localStorage 監聽登入完成的狀態。
+   */
   const LoginManager = {
     popup: null,
     pollClose: null,
 
-    openPopup: function (loginUrl) {
+    /**
+     * 開啟登入彈窗
+     * @param {string} loginUrl - OAuth 登入網址
+     */
+    openPopup: function(loginUrl) {
       if (this.popup && !this.popup.closed) {
         this.popup.focus();
         return;
@@ -40,6 +45,10 @@
       }, 1000);
     },
 
+    /**
+     * 接收到 Token 後，結束登入流程並將 Token 寫入 localStorage
+     * @param {string} token - 後端配發的驗證 Token
+     */
     finishLogin: function (token) {
       this.cleanup();
       localStorage.setItem('my_app_token', token);
@@ -48,6 +57,10 @@
       checkAuthStatus();
     },
 
+    /**
+     * 監聽同網域下其他視窗 (包含彈窗) 的 localStorage 變更事件
+     * 這是取得登入成功通知的方法之一 (跨視窗通訊)
+     */
     storageHandler: function (e) {
       if (e.key === 'gas_auth_result' && e.newValue) {
         try {
@@ -57,12 +70,19 @@
       }
     },
 
+    /**
+     * 監聽彈窗傳來的 postMessage 事件
+     * 這是取得登入成功通知的另一種方法 (跨網域通訊)
+     */
     msgHandler: function (event) {
       if (event.data && event.data.type === 'gas_oauth_token') {
         LoginManager.finishLogin(event.data.token);
       }
     },
 
+    /**
+     * 清除登入過程中掛載的計時器與事件監聽器
+     */
     cleanup: function () {
       if (this.pollClose) clearInterval(this.pollClose);
       window.removeEventListener('storage', this.storageHandler);
@@ -70,507 +90,48 @@
     }
   };
 
-  // 通用提交按鈕狀態設定器
-  function setSubmitBtnState(btnId, enabled, text, colorClass) {
-    const btn = AUTH_DOM.get(btnId);
-    if (!btn) return;
-    btn.disabled = !enabled;
-    btn.innerHTML = `<span>${text}</span>`;
-    btn.className = `px-5 py-2.5 rounded-lg ${colorClass} font-medium transition duration-200 shadow-sm flex items-center justify-center`;
-  }
-
-  function hideLoadingOverlay() {
-    const overlay = document.getElementById('loading-overlay');
-    if (overlay) {
-      overlay.classList.add('opacity-0');
-      setTimeout(() => overlay.classList.add('hidden'), 300);
-    }
-  }
-
-  function checkAuthStatus() {
+  /**
+   * 檢查當前使用者的權限狀態 (Auth Status)
+   * 會呼叫後端 API 驗證 Token 是否有效，並將結果傳遞給 setupUI 進行畫面渲染
+   * @returns {Promise<void>}
+   */
+  async function checkAuthStatus() {
     const btnAuth = document.getElementById('btn-login-logout');
     if (btnAuth) btnAuth.innerText = '驗證中...';
 
-    google.script.run
-      .withSuccessHandler(function (status) {
-        setupUI(status);
-      })
-      .withFailureHandler(function (err) {
-        setupUI({ loggedIn: false, role: 'guest', loginUrl: window.cachedLoginUrl || '' });
-        const emailEl = document.getElementById('email');
-        if (emailEl) emailEl.value = '無法載入權限資訊';
-      })
-      .getAuthStatus(getToken());
+    try {
+      const status = await ApiService.auth.getStatus(getToken());
+      if (typeof setupUI === 'function') setupUI(status);
+    } catch (err) {
+      console.error('Auth Check Error:', err);
+      if (typeof setupUI === 'function') setupUI({ loggedIn: false, role: 'guest', loginUrl: window.cachedLoginUrl || '' });
+      const emailEl = document.getElementById('email');
+      if (emailEl) emailEl.value = '無法載入權限資訊';
+    }
   }
 
-  function handleLogout() {
+  /**
+   * 處理使用者登出流程
+   * 會清除 localStorage 的 Token，呼叫後端登出 API，並將畫面重置為訪客狀態
+   * @returns {Promise<void>}
+   */
+  async function handleLogout() {
     const btnAuth = document.getElementById('btn-login-logout');
     if (btnAuth) btnAuth.innerText = '登出中...';
-    google.script.run
-      .withSuccessHandler(function () {
-        localStorage.removeItem('my_app_token');
-        google.script.run
-          .withSuccessHandler(function (status) { setupUI(status); })
-          .withFailureHandler(function () { setupUI({ loggedIn: false, role: 'guest', loginUrl: '' }); })
-          .getAuthStatus(getToken());
-      })
-      .withFailureHandler(function (err) {
-        alert('登出失敗：' + (err && err.message ? err.message : err));
-        google.script.run.withSuccessHandler(function (status) { setupUI(status); }).getAuthStatus(getToken());
-      })
-      .logoutOAuth(getToken());
-  }
-
-  function setupUI(status) {
-    if (status.loggedIn) {
-      currentUserEmail = status.email;
-      currentUserDisplayName = status.displayName || currentUserEmail.split('@')[0];
-      window.currentUserEmail = currentUserEmail;
-      window.currentUserDisplayName = currentUserDisplayName;
-
-      fillFormsUserInfo(currentUserEmail, currentUserDisplayName);
-      renderUserAuthMenu(status.picture);
-
-      window.currentAuthRole = status.role;
-      renderRoleBasedUI(status.role, status.message);
-
-      if (status.role !== 'student' && status.role !== 'invalid') {
-        triggerBackgroundPrefetch(status.role);
-      }
-    } else {
-      currentUserEmail = '';
-      currentUserDisplayName = '';
-      window.currentUserEmail = '';
-      window.currentUserDisplayName = '';
-
-      fillFormsUserInfo('尚未登入', '尚未登入');
-      renderGuestAuthMenu(status.loginUrl);
-      window.currentAuthRole = 'guest';
-      renderRoleBasedUI('guest', '');
-    }
-  }
-
-  function fillFormsUserInfo(email, name) {
-    AUTH_DOM.safeSet('email', email);
-    AUTH_DOM.safeSet('applicant', name);
-    AUTH_DOM.safeSet('equip_applicant', name);
-    AUTH_DOM.safeSet('equipBorrow_applicant', name);
-    AUTH_DOM.safeSet('equipBorrow_email', email);
-    AUTH_DOM.safeSet('equip_email', email);
-  }
-
-  function renderUserAuthMenu(picture) {
-    const btnAuth = AUTH_DOM.get('btn-login-logout');
-    const dropdownMenu = AUTH_DOM.get('user-dropdown-menu');
-    if (!btnAuth) return;
-
-    let userIconHtml = `<div class="w-10 h-10 rounded-full bg-slate-500 flex items-center justify-center text-white font-bold text-lg">${currentUserDisplayName.charAt(0)}</div>`;
-    if (picture) {
-      userIconHtml = `<img src="${picture}" class="w-10 h-10 rounded-full border border-slate-300 object-cover" alt="User" referrerpolicy="no-referrer">`;
-    }
-
-    btnAuth.innerHTML = userIconHtml;
-    btnAuth.href = "#";
-    btnAuth.onclick = function (e) {
-      e.preventDefault();
-      if (dropdownMenu) dropdownMenu.classList.toggle('hidden');
-    };
-    btnAuth.className = "rounded-full shadow-sm hover:shadow-md transition focus:outline-none flex items-center justify-center border-2 border-transparent hover:border-slate-300 p-0.5 ml-2";
-
-    const pubWrapper = AUTH_DOM.get('public-computer-wrapper');
-    if (pubWrapper) pubWrapper.classList.add('hidden');
-
-    const dropdownGreeting = AUTH_DOM.get('dropdown-greeting');
-    if (dropdownGreeting) {
-      dropdownGreeting.innerText = `${currentUserDisplayName}，你好`;
-      dropdownGreeting.classList.remove('hidden');
-    }
-  }
-
-  function renderGuestAuthMenu(loginUrl) {
-    const btnAuth = AUTH_DOM.get('btn-login-logout');
-    const dropdownMenu = AUTH_DOM.get('user-dropdown-menu');
-    if (!btnAuth) return;
-
-    if (dropdownMenu) dropdownMenu.classList.add('hidden');
-
-    btnAuth.innerHTML = '<i class="fa-solid fa-sign-in-alt mr-1"></i> 登入';
-    btnAuth.href = "#";
-    btnAuth.onclick = function (e) {
-      e.preventDefault();
-      const targetUrl = loginUrl || window.cachedLoginUrl;
-      if (targetUrl) {
-        let finalUrl = targetUrl;
-        const pubCb = AUTH_DOM.get('is-public-computer');
-        if (pubCb && pubCb.checked) {
-          // 公用電腦模式：先強制登出 Google 所有帳號，徹底避免 GAS 多重帳號 Bug
-          LoginManager.openPopup('https://accounts.google.com/Logout');
-          setTimeout(() => {
-            if (LoginManager.popup && !LoginManager.popup.closed) {
-              LoginManager.popup.location.href = finalUrl;
-            }
-          }, 2000);
-          return;
-        }
-        LoginManager.openPopup(finalUrl);
-      } else {
-        btnAuth.innerText = '載入中...';
-        google.script.run
-          .withSuccessHandler(function (url) {
-            let finalUrl = url;
-            const pubCb = AUTH_DOM.get('is-public-computer');
-            if (pubCb && pubCb.checked) {
-              LoginManager.openPopup('https://accounts.google.com/Logout');
-              setTimeout(() => {
-                if (LoginManager.popup && !LoginManager.popup.closed) {
-                  LoginManager.popup.location.href = finalUrl;
-                }
-              }, 2000);
-              return;
-            }
-            window.cachedLoginUrl = finalUrl;
-            LoginManager.openPopup(finalUrl);
-          })
-          .withFailureHandler(function (err) {
-            btnAuth.innerText = '登入';
-            alert('無法取得登入網址，請稍後再試或重新整理網頁。');
-          })
-          .getLoginUrl();
-      }
-    };
-    btnAuth.className = "px-3.5 py-1.5 rounded-md bg-slate-200 text-slate-800 font-medium shadow-sm hover:bg-slate-300 transition text-sm flex items-center gap-1 ml-2";
-
-    const pubWrapper = AUTH_DOM.get('public-computer-wrapper');
-    if (pubWrapper) pubWrapper.classList.remove('hidden');
-
-    // 定期更新 login url
-    if (!window.loginUrlInterval) {
-      window.loginUrlInterval = setInterval(function () {
-        google.script.run.withSuccessHandler(function (url) {
-          if (btnAuth.innerText === '登入') {
-            window.cachedLoginUrl = url;
-          }
-        }).getLoginUrl();
-      }, 8 * 60 * 1000);
-    }
-  }
-
-  function renderRoleBasedUI(role, authMessage) {
-    const loginWarning = AUTH_DOM.get('login-warning');
-    const title = AUTH_DOM.get('login-warning-title');
-    const desc = AUTH_DOM.get('login-warning-desc');
-
-    const DISABLED_CLASS = 'cursor-not-allowed bg-slate-400 text-slate-200';
-    const ENABLED_BLUE = 'bg-blue-600 text-white hover:bg-blue-700';
-
-    const isStudent = (role === 'student');
-    const isGuest = (role === 'guest');
-    const isInvalid = (role === 'invalid');
-    const isAdmin = (role === 'admin');
-
-    if (isInvalid || isStudent || isGuest) {
-      // 顯示警告訊息
-      if (loginWarning) {
-        if (isInvalid) {
-          loginWarning.classList.remove('hidden');
-          if (title) title.innerText = '提示：無效帳號';
-          if (desc) desc.innerText = '您目前登入的是 ' + currentUserEmail + '。' + (authMessage || '請點擊右上方的「登出」並重新使用合適帳號登入。');
-        } else if (isGuest) {
-          loginWarning.classList.remove('hidden');
-          if (title) title.innerText = '提示：唯讀模式';
-          if (desc) desc.innerText = '填寫與送出申請前，您必須點擊右上方的「登入」使用學校帳號。';
-        } else if (isStudent) {
-          if (title) title.innerText = '提示：權限不足';
-          if (desc) desc.innerText = '您目前以學生帳號 (' + currentUserEmail + ') 登入。藥品請購與設備申請僅限教職員；學生可進行「1. 教學及實驗設備借用」與「2. 自然科實驗室預約」。';
-          if (currentSystemTab === 'lab' || currentSystemTab === 'equipBorrow') loginWarning.classList.add('hidden');
-          else loginWarning.classList.remove('hidden');
-        }
-      }
-
-      // 禁用與隱藏邏輯
-      setSubmitBtnState('submitBtn', false, isGuest ? '需登入後才能送出請購' : (isStudent ? '學生無權限' : '無權限請購'), DISABLED_CLASS);
-      setSubmitBtnState('equip_submitBtn', false, isGuest ? '需登入後才能送出申請' : (isStudent ? '學生無權限' : '無權限申請'), DISABLED_CLASS);
-
-      if (isStudent) {
-        setSubmitBtnState('equipBorrow_submitBtn', true, '送出借用申請', ENABLED_BLUE);
-      } else {
-        setSubmitBtnState('equipBorrow_submitBtn', false, isGuest ? '需登入後才能送出借用' : '無權限借用', DISABLED_CLASS);
-      }
-
-      const labBtn = AUTH_DOM.get('lab_submitBtn');
-      if (labBtn) {
-        if (isStudent) {
-          labBtn.disabled = false;
-          labBtn.innerHTML = '<span>確認預約</span>';
-          labBtn.className = "px-4 py-2 bg-indigo-600 text-white font-medium hover:bg-indigo-700 rounded-lg transition shadow-md";
-        } else {
-          labBtn.disabled = true;
-          labBtn.innerHTML = isGuest ? '<span>需登入後才能送出預約</span>' : '<span>無權限預約</span>';
-          labBtn.className = "px-4 py-2 bg-slate-400 text-slate-200 font-medium rounded-lg transition shadow-md cursor-not-allowed";
-        }
-      }
-
-      // 隱藏列表與後台按鈕
-      ['dropdown-user-list-chem', 'chem-import-container', 'dropdown-user-list-equip', 'btn-admin-chem', 'btn-admin-equip', 'btn-admin-equipBorrow'].forEach(id => {
-        const node = AUTH_DOM.get(id); if (node) node.classList.add('hidden');
-      });
-      if (typeof DOM !== 'undefined' && DOM.btnSettings) DOM.btnSettings.classList.add('hidden');
-
-      const btnEquipBorrow = AUTH_DOM.get('dropdown-user-list-equipBorrow');
-      if (btnEquipBorrow) {
-        if (isStudent) btnEquipBorrow.classList.remove('hidden');
-        else btnEquipBorrow.classList.add('hidden');
-      }
-
-      switchView('apply');
-      if (currentSystemTab === 'lab' && typeof fetchLabBackendData === 'function' && isStudent) {
-        fetchLabBackendData();
-      }
-
-    } else {
-      // Admin 或 Teacher
-      if (loginWarning) loginWarning.classList.add('hidden');
-
-      setSubmitBtnState('submitBtn', true, '送出請購', ENABLED_BLUE);
-      setSubmitBtnState('equip_submitBtn', true, '送出申請', ENABLED_BLUE);
-      setSubmitBtnState('equipBorrow_submitBtn', true, '送出借用申請', ENABLED_BLUE);
-
-      const labBtn = AUTH_DOM.get('lab_submitBtn');
-      if (labBtn) {
-        labBtn.disabled = false;
-        labBtn.innerHTML = '<span>確認預約</span>';
-        labBtn.className = "px-4 py-2 bg-indigo-600 text-white font-medium hover:bg-indigo-700 rounded-lg transition shadow-md";
-      }
-
-      ['dropdown-user-list-chem', 'chem-import-container', 'dropdown-user-list-equip', 'dropdown-user-list-equipBorrow'].forEach(id => {
-        const node = AUTH_DOM.get(id); if (node) node.classList.remove('hidden');
-      });
-
-      if (isAdmin) {
-        ['btn-admin-chem', 'btn-admin-equip', 'btn-admin-equipBorrow'].forEach(id => {
-          const node = AUTH_DOM.get(id); if (node) node.classList.remove('hidden');
-        });
-        if (typeof DOM !== 'undefined' && DOM.btnSettings) DOM.btnSettings.classList.remove('hidden');
-      } else {
-        ['btn-admin-chem', 'btn-admin-equip', 'btn-admin-equipBorrow'].forEach(id => {
-          const node = AUTH_DOM.get(id); if (node) node.classList.add('hidden');
-        });
-        if (typeof DOM !== 'undefined' && DOM.btnSettings) DOM.btnSettings.classList.add('hidden');
-      }
-    }
-  }
-
-  function triggerBackgroundPrefetch(role) {
-    setTimeout(() => {
-      if (!window.SystemCache) return;
-      const token = getToken();
-      ['chem', 'equip', 'equipBorrow'].forEach(sys => {
-        if (role === 'admin') {
-          window.SystemCache.fetchData(`admin_${sys}`, () => window.callGas('getAdminData', token, sys), () => { });
-        }
-        window.SystemCache.fetchData(`user_${sys}`, () => window.callGas('getUserData', token, sys), () => { });
-      });
-      window.SystemCache.fetchData('labData', () => window.callGas('getLabData'), () => { });
-    }, 1000);
-  }
-
-  function setTabActiveState(btnArray, activeBtn) {
-    btnArray.forEach(btn => {
-      if (!btn) return;
-      if (btn === activeBtn) {
-        btn.classList.remove('bg-slate-800', 'text-slate-300', 'hover:bg-slate-700');
-        btn.classList.add('bg-blue-600', 'text-white', 'shadow-sm', 'hover:bg-blue-700');
-      } else {
-        btn.classList.remove('bg-blue-600', 'text-white', 'shadow-sm', 'hover:bg-blue-700');
-        btn.classList.add('bg-slate-800', 'text-slate-300', 'hover:bg-slate-700');
-      }
-    });
-  }
-
-  function switchGlobalView(mode) {
-    if (typeof DOM === 'undefined' || !DOM.mainContent || !DOM.settingsContent) return;
-    if (mode === 'settings') {
-      DOM.mainContent.classList.add('hidden');
-      DOM.settingsContent.classList.remove('hidden');
-      setTabActiveState([DOM.btnApply, DOM.btnUserList, DOM.btnSettings], DOM.btnSettings);
-      if (typeof loadSystemSettings === 'function') loadSystemSettings();
-    } else {
-      DOM.settingsContent.classList.add('hidden');
-      DOM.mainContent.classList.remove('hidden');
-      setTabActiveState([DOM.btnSettings], null);
-    }
-  }
-
-  function switchView(view, sys) {
+    
     try {
-      if (typeof switchGlobalView === 'function') switchGlobalView('main');
-      if (sys) currentSystemTab = sys;
-      currentActionView = view;
-
-      let activeAdminBtn = null;
-      if (view === 'admin') {
-        if (currentSystemTab === 'chem') activeAdminBtn = AUTH_DOM.get('btn-admin-chem');
-        else if (currentSystemTab === 'equip') activeAdminBtn = AUTH_DOM.get('btn-admin-equip');
-        else if (currentSystemTab === 'equipBorrow') activeAdminBtn = AUTH_DOM.get('btn-admin-equipBorrow');
-      }
-
-      const allBtns = [];
-      if (typeof DOM !== 'undefined') {
-        allBtns.push(DOM.btnApply, DOM.btnUserList);
-      }
-      allBtns.push(AUTH_DOM.get('btn-admin-chem'), AUTH_DOM.get('btn-admin-equip'), AUTH_DOM.get('btn-admin-equipBorrow'));
-      
-      let targetActiveBtn = null;
-      if (view === 'apply' && typeof DOM !== 'undefined') targetActiveBtn = DOM.btnApply;
-      else if (view === 'user-list' && typeof DOM !== 'undefined') targetActiveBtn = DOM.btnUserList;
-      else if (view === 'admin') targetActiveBtn = activeAdminBtn;
-      
-      setTabActiveState(allBtns, targetActiveBtn);
-
-      const systems = ['chem', 'lab', 'equip', 'equipBorrow'];
-      systems.forEach(s => {
-        const el = AUTH_DOM.get(`tab-container-${s}`);
-        if (el) el.classList.add('hidden');
-      });
-      const datalistContainer = AUTH_DOM.get('tab-container-datalist');
-      if (datalistContainer) datalistContainer.classList.add('hidden');
-
-      if (view === 'apply') {
-        const activeSys = AUTH_DOM.get(`tab-container-${currentSystemTab}`);
-        if (activeSys) activeSys.classList.remove('hidden');
-        systems.forEach(s => {
-          const el = AUTH_DOM.get(`view-apply-${s}`);
-          if (el) {
-            if (s === currentSystemTab) el.classList.remove('hidden');
-            else el.classList.add('hidden');
-          }
-        });
-      } else if (view === 'user-list' || view === 'admin') {
-        if (datalistContainer) datalistContainer.classList.remove('hidden');
-        const isDatalistContainer = AUTH_DOM.get('view-datalist-container');
-        if (isDatalistContainer) isDatalistContainer.classList.remove('hidden');
-        if (typeof renderDatalist === 'function') renderDatalist(view, currentSystemTab);
-      }
+      await ApiService.auth.logout(getToken());
+      localStorage.removeItem('my_app_token');
+      const status = await ApiService.auth.getStatus(getToken());
+      if (typeof setupUI === 'function') setupUI(status);
     } catch (err) {
-      alert('switchView error: ' + err.stack);
-    }
-  }
-
-  function switchApplyForm(formId) {
-    try {
-      currentSystemTab = formId;
-      const forms = ['chem', 'lab', 'equip', 'equipBorrow'];
-      forms.forEach(id => {
-        const containerEl = AUTH_DOM.get('tab-container-' + id);
-        const btnEl = AUTH_DOM.get('btn-apply-' + id);
-        if (containerEl) containerEl.classList.add('hidden');
-        if (btnEl) {
-          btnEl.classList.remove('bg-blue-50', 'text-blue-700', 'font-semibold');
-          btnEl.classList.add('text-slate-600', 'hover:bg-slate-50');
-        }
-      });
-
-      const activeContainer = AUTH_DOM.get('tab-container-' + formId);
-      const activeBtn = AUTH_DOM.get('btn-apply-' + formId);
-      if (activeContainer) activeContainer.classList.remove('hidden');
-      if (activeBtn) {
-        activeBtn.classList.remove('text-slate-600', 'hover:bg-slate-50');
-        activeBtn.classList.add('bg-blue-50', 'text-blue-700', 'font-semibold');
-      }
-
-      if (window.currentAuthRole === 'student') {
-        const warnEl = AUTH_DOM.get('login-warning');
-        if (warnEl) {
-          if (formId === 'lab' || formId === 'equipBorrow') warnEl.classList.add('hidden');
-          else warnEl.classList.remove('hidden');
-        }
-      }
-
-      switchView('apply');
-    } catch (err) {
-      alert('switchApplyForm error: ' + err.stack);
-    }
-  }
-
-  function isMobilePortrait() {
-    return window.innerWidth < 768 && window.innerHeight >= window.innerWidth;
-  }
-
-  function toggleSidebar() {
-    const sidebar = AUTH_DOM.get('sidebar-container');
-    const title = AUTH_DOM.get('sidebar-title');
-    const texts = document.querySelectorAll('.sidebar-text');
-    const header = AUTH_DOM.get('sidebar-header');
-    const list = AUTH_DOM.get('sidebar-list') || document.querySelector('#sidebar-container ul');
-
-    if (isMobilePortrait()) {
-      if (!list || list.classList.contains('hidden')) {
-        if (list) list.classList.remove('hidden');
-        if (header) { header.classList.add('mb-4', 'border-b', 'pb-2'); }
-      } else {
-        if (list) list.classList.add('hidden');
-        if (header) { header.classList.remove('mb-4', 'border-b', 'pb-2'); }
-      }
-    } else {
-      if (sidebar.classList.contains('md:w-64') || sidebar.classList.contains('landscape:w-64')) {
-        sidebar.classList.remove('md:w-64', 'landscape:w-64');
-        sidebar.classList.add('md:w-20', 'landscape:w-20');
-        if (title) title.classList.add('hidden');
-        if (header) { header.classList.remove('px-1'); header.classList.add('justify-center'); }
-        texts.forEach(el => { el.classList.add('opacity-0'); setTimeout(() => el.classList.add('hidden'), 150); });
-        document.querySelectorAll('#sidebar-container ul button').forEach(btn => {
-          btn.classList.add('justify-center'); btn.classList.remove('px-3'); btn.classList.add('px-0');
-        });
-      } else {
-        sidebar.classList.remove('md:w-20', 'landscape:w-20');
-        sidebar.classList.add('md:w-64', 'landscape:w-64');
-        if (title) title.classList.remove('hidden');
-        if (header) { header.classList.remove('justify-center'); header.classList.add('px-1'); }
-        texts.forEach(el => { el.classList.remove('hidden'); setTimeout(() => el.classList.remove('opacity-0'), 10); });
-        document.querySelectorAll('#sidebar-container ul button').forEach(btn => {
-          btn.classList.remove('justify-center'); btn.classList.remove('px-0'); btn.classList.add('px-3');
-        });
+      alert('登出失敗：' + (err && err.message ? err.message : err));
+      try {
+        const status = await ApiService.auth.getStatus(getToken());
+        if (typeof setupUI === 'function') setupUI(status);
+      } catch (innerErr) {
+        if (typeof setupUI === 'function') setupUI({ loggedIn: false, role: 'guest', loginUrl: '' });
       }
     }
   }
-
-  let _lastMobilePortrait = isMobilePortrait();
-  window.addEventListener('resize', () => {
-    const nowPortrait = isMobilePortrait();
-    if (nowPortrait !== _lastMobilePortrait) {
-      _lastMobilePortrait = nowPortrait;
-      const sidebar = AUTH_DOM.get('sidebar-container');
-      const title = AUTH_DOM.get('sidebar-title');
-      const texts = document.querySelectorAll('.sidebar-text');
-      const header = AUTH_DOM.get('sidebar-header');
-      const list = AUTH_DOM.get('sidebar-list') || document.querySelector('#sidebar-container ul');
-
-      if (nowPortrait) {
-        if (sidebar) { sidebar.classList.remove('md:w-20', 'landscape:w-20'); sidebar.classList.add('md:w-64', 'landscape:w-64'); }
-        if (title) title.classList.remove('hidden');
-        if (header) { header.classList.remove('justify-center'); header.classList.add('px-1'); }
-        texts.forEach(el => { el.classList.remove('hidden', 'opacity-0'); });
-        document.querySelectorAll('#sidebar-container ul button').forEach(btn => {
-          btn.classList.remove('justify-center', 'px-0'); btn.classList.add('px-3');
-        });
-      } else {
-        if (list) list.classList.remove('hidden');
-        if (header) header.classList.add('mb-4', 'border-b', 'pb-2');
-      }
-    }
-  });
-
-  setupUI({ loggedIn: false, role: 'guest', loginUrl: '' });
-  hideLoadingOverlay();
-
-  google.script.run.withSuccessHandler(function (url) {
-    window.cachedLoginUrl = url;
-    const btnAuth = document.getElementById('btn-login-logout');
-    if (btnAuth && btnAuth.innerText === '登入') btnAuth.href = url;
-  }).getLoginUrl();
-
-  const storedToken = typeof getToken === 'function' ? getToken() : null;
-  if (typeof templateSessionToken !== 'undefined' && templateSessionToken || storedToken) {
-    checkAuthStatus();
-  }
-</script>
+</script>

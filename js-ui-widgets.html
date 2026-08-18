@@ -1,10 +1,15 @@
 <script>
   // ==========================================
-  // js-ui-widgets.html — UI 元件
-  // 職責：PageNav、DataTableManager、window.alert 覆寫、showConfirm
-  // 載入順序：依賴 js-core.html（debounce）
+  // Module: js-ui-widgets.html
+  // Responsibility: 負責共用的 UI 複雜元件，包含分頁導覽器 (PageNav)、資料表管理器 (DataTableManager)、以及圖片放大與 Tooltip 等浮動元件初始化。
+  // Dependencies: js-core.html (提供 debounce 與 AppState), js-config.html (提供 DataUtils)
+  // Exports: PageNav, DataTableManager, ensureDatalistManager
   // ==========================================
 
+  /**
+   * 分頁導覽器 (PageNav)
+   * 負責渲染分頁按鈕 (上一頁、下一頁)、顯示當前頁數資訊，以及處理每頁筆數變更。
+   */
   class PageNav {
     constructor(containerId, options) {
       this.containerId = containerId;
@@ -19,6 +24,13 @@
       }
     }
 
+    /**
+     * 渲染分頁 UI
+     * @param {number} currentPage - 當前頁碼
+     * @param {number} totalPages - 總頁數
+     * @param {number} totalItems - 總資料筆數
+     * @param {number} currentSize - 當前每頁顯示筆數
+     */
     render(currentPage, totalPages, totalItems, currentSize) {
       const container = document.getElementById(this.containerId);
       if (!container) return;
@@ -80,6 +92,10 @@
     }
   }
 
+  /**
+   * 資料表管理器 (DataTableManager)
+   * 負責統籌資料清單的篩選、分頁計算與渲染。支援結合 PageNav 進行聯動更新，並提供圖表放大、Tooltip 等附加功能。
+   */
   class DataTableManager {
     constructor(config) {
       DataTableManager.initOverlays();
@@ -108,14 +124,22 @@
       }
     }
 
+    /**
+     * 設定原始資料並進行初始篩選
+     * @param {Array<Object>} data - 從後端或快取取得的原始陣列資料
+     */
     setData(data) {
       this.rawData = data || [];
       if (this.config.yearFilterId) {
-        populateYearFilters(this.rawData, this.config.yearFilterId);
+        DataUtils.populateYearFilters(this.rawData, this.config.yearFilterId);
       }
       this.applyFilters();
     }
 
+    /**
+     * 套用年份、月份、關鍵字篩選器
+     * 將過濾後的結果存入 filteredData 並重設頁碼為 1 後重新渲染
+     */
     applyFilters() {
       const c = this.config;
       const year = c.yearFilterId ? document.getElementById(c.yearFilterId).value : '';
@@ -123,7 +147,7 @@
       const applicantKeyword = c.applicantFilterId ? document.getElementById(c.applicantFilterId).value.toLowerCase().trim() : '';
 
       this.filteredData = this.rawData.filter(item => {
-        if (!filterByDate(item, year, month)) return false;
+        if (!DataUtils.filterByDate(item, year, month)) return false;
         if (applicantKeyword) {
           const matchKeyword = String(item.applicant || '').toLowerCase().indexOf(applicantKeyword) !== -1 ||
             String(item.email || '').toLowerCase().indexOf(applicantKeyword) !== -1 ||
@@ -138,6 +162,9 @@
       this.render();
     }
 
+    /**
+     * 根據當前分頁與篩選結果，渲染表格主體與加總列 (若啟用 calculateSum)
+     */
     render() {
       const tbody = document.getElementById(this.config.tableBodyId);
       const totalItems = this.filteredData.length;
@@ -196,9 +223,12 @@
     }
 
     static isTooltipEnabled() {
-      return !window.APP_FEATURES || window.APP_FEATURES.tooltip !== false;
+      return !AppState.features || AppState.features.tooltip !== false;
     }
 
+    /**
+     * 初始化全域的浮動元件 (Image Modal, Tooltip)
+     */
     static initOverlays() {
       DataTableManager.initImageModal();
       if (DataTableManager.isTooltipEnabled()) {
@@ -210,8 +240,8 @@
       if (document.getElementById('image-modal')) return;
 
       const imageModalHtml = `
-          <div id="image-modal" class="fixed inset-0 z-[200] hidden items-center justify-center bg-black/70 backdrop-blur-sm transition-opacity duration-300 opacity-0" onclick="closeImageModal()">
-            <div class="relative max-w-4xl max-h-[90vh] w-[90%] mx-auto bg-white rounded-lg shadow-2xl p-2 flex flex-col items-center transform scale-95 transition-transform duration-300" onclick="event.stopPropagation()">
+          <div id="image-modal" class="fixed inset-0 z-[200] hidden items-center justify-center bg-black/70 backdrop-blur-sm transition-opacity duration-200 opacity-0" onclick="closeImageModal()">
+            <div class="relative max-w-4xl max-h-[90vh] w-[90%] mx-auto bg-white rounded-lg shadow-2xl p-2 flex flex-col items-center transform scale-95 transition-transform duration-200" onclick="event.stopPropagation()">
               <button onclick="closeImageModal()" class="absolute top-2 right-2 w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 transition">
                 <i class="fa-solid fa-xmark"></i>
               </button>
@@ -248,17 +278,19 @@
       document.body.addEventListener('mouseover', (e) => {
         if (e.target.closest('button, input, select')) { DataTableManager.hideTooltip(); return; }
         const tr = e.target.closest('tr.tooltip-trigger');
-        if (tr) DataTableManager.showTooltip(tr);
+        if (tr) {
+          DataTableManager.showTooltip(tr);
+          tr.addEventListener('mousemove', DataTableManager.moveTooltip);
+        }
       });
-      document.body.addEventListener('mousemove', (e) => {
-        if (e.target.closest('button, input, select')) return;
-        const tr = e.target.closest('tr.tooltip-trigger');
-        if (tr) DataTableManager.moveTooltip(e);
-      });
+      
       document.body.addEventListener('mouseout', (e) => {
         if (e.target.closest('button, input, select')) return;
         const tr = e.target.closest('tr.tooltip-trigger');
-        if (tr && !tr.contains(e.relatedTarget)) DataTableManager.hideTooltip();
+        if (tr && !tr.contains(e.relatedTarget)) {
+          DataTableManager.hideTooltip();
+          tr.removeEventListener('mousemove', DataTableManager.moveTooltip);
+        }
       });
     }
 
@@ -312,6 +344,11 @@
 
   let datalistManager;
 
+  /**
+   * 初始化並回傳全域的資料表管理器實例 (Singleton 模式)
+   * 用於主要的申請清單與審核面板
+   * @returns {DataTableManager|null}
+   */
   function initDataListManager() {
     if (datalistManager) return datalistManager;
     const pageContainer = document.getElementById('datalist-pagination-container');
@@ -356,373 +393,4 @@
 
     initDataListManager();
   });
-
-  // 取消教室預約處理函數
-  async function handleCancelLabBooking(booking) {
-    const dialog = document.getElementById('custom-alert-dialog');
-    
-    let cancelMode = 'abort';
-    
-    if (booking.groupId) {
-      // 週期性預約的確認視窗
-      cancelMode = await new Promise((resolve) => {
-        let recDialog = document.getElementById('recurring-cancel-dialog');
-        if (!recDialog) {
-          const html = `
-            <dialog id="recurring-cancel-dialog" class="backdrop:bg-slate-900/50 backdrop:backdrop-blur-sm rounded-xl shadow-2xl p-0 border-0 m-auto min-w-[320px] max-w-md w-full transition-all duration-200 transform scale-95 opacity-0">
-              <div class="bg-white rounded-xl overflow-hidden">
-                <div class="px-6 py-5">
-                  <div class="flex items-center gap-3 text-rose-600 mb-3">
-                    <i class="fa-solid fa-triangle-exclamation text-xl"></i>
-                    <h3 class="text-lg font-semibold text-slate-900">取消週期性預約</h3>
-                  </div>
-                  <p class="text-slate-600 mb-2">此預約為週期性預約的一部分。</p>
-                  <p class="text-slate-600 text-sm">請問您要僅取消「這一次」的預約，還是要取消「未來的所有」關聯預約？此動作無法復原。</p>
-                </div>
-                <div class="px-6 py-4 bg-slate-50 flex flex-col gap-2">
-                  <button type="button" id="rec-cancel-series-btn" class="w-full px-4 py-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700 transition font-medium shadow-sm">取消全部 (未來所有關聯預約)</button>
-                  <button type="button" id="rec-cancel-single-btn" class="w-full px-4 py-2 bg-slate-200 text-slate-800 rounded-lg hover:bg-slate-300 transition font-medium">僅取消本次</button>
-                  <button type="button" id="rec-cancel-abort-btn" class="w-full px-4 py-2 mt-2 text-slate-500 hover:text-slate-700 transition font-medium">不取消 (返回)</button>
-                </div>
-              </div>
-            </dialog>
-          `;
-          document.body.insertAdjacentHTML('beforeend', html);
-          recDialog = document.getElementById('recurring-cancel-dialog');
-        }
-        
-        const closeDiag = (res) => {
-          recDialog.classList.remove('opacity-100', 'scale-100');
-          recDialog.classList.add('opacity-0', 'scale-95');
-          setTimeout(() => { if (recDialog.open) recDialog.close(); resolve(res); }, 200);
-        };
-        
-        document.getElementById('rec-cancel-series-btn').onclick = () => closeDiag('series');
-        document.getElementById('rec-cancel-single-btn').onclick = () => closeDiag('single');
-        document.getElementById('rec-cancel-abort-btn').onclick = () => closeDiag('abort');
-        
-        recDialog.showModal();
-        recDialog.classList.remove('opacity-0', 'scale-95');
-        recDialog.classList.add('opacity-100', 'scale-100');
-      });
-      if (cancelMode === 'abort') return;
-    } else {
-      const isConfirmed = await showConfirm(`您確定要取消「${booking.title}」於 ${booking.date} (${booking.start}-${booking.end}) 的預約嗎？此動作無法復原。`);
-      if (!isConfirmed) return;
-      cancelMode = 'single';
-    }
-
-    const cancelBtn = document.getElementById('custom-alert-cancel-booking-btn');
-    if (cancelBtn) { cancelBtn.textContent = '處理中...'; cancelBtn.disabled = true; }
-
-    const onSuccess = function (res) {
-      if (cancelBtn) { cancelBtn.textContent = '取消預約'; cancelBtn.disabled = false; }
-      if (dialog) {
-        dialog.classList.remove('opacity-100', 'scale-100');
-        dialog.classList.add('opacity-0', 'scale-95');
-        if (dialog.open) dialog.close();
-      }
-      if (res.success) {
-        alert(cancelMode === 'series' ? '已成功取消該系列未來的所有教室預約！' : '已成功取消該次教室預約！');
-        if (typeof fetchLabBackendData === 'function') fetchLabBackendData();
-      } else {
-        alert('取消失敗：' + (res.message || '未知錯誤'));
-      }
-    };
-
-    const onFailure = function (err) {
-      if (cancelBtn) { cancelBtn.textContent = '取消預約'; cancelBtn.disabled = false; }
-      alert('連線失敗，無法取消：' + (err && err.message ? err.message : err));
-    };
-
-    if (typeof google !== 'undefined' && google.script && typeof getToken === 'function') {
-      google.script.run
-        .withSuccessHandler(onSuccess)
-        .withFailureHandler(onFailure)
-        .cancelLabBooking(booking.rowNumber, getToken(), cancelMode === 'series');
-    } else {
-      if (dialog) {
-        dialog.classList.remove('opacity-100', 'scale-100');
-        dialog.classList.add('opacity-0', 'scale-95');
-        if (dialog.open) dialog.close();
-      }
-      alert('本地測試：已成功發送取消申請紀錄 (列號 ' + booking.rowNumber + ', cancelSeries: ' + (cancelMode === 'series') + ')');
-    }
-  }
-
-  // 覆寫瀏覽器預設的 alert 視窗，使用精美的客製化 Modal
-  window.alert = function (message, customTitle = null, customOptions = null) {
-    const dialog = document.getElementById('custom-alert-dialog');
-    if (!dialog) return;
-
-    const msgEl = document.getElementById('custom-alert-message');
-    const iconContainer = document.getElementById('alert-icon-container');
-    const closeBtn = document.getElementById('custom-alert-close-btn');
-    const xBtn = document.getElementById('custom-alert-x-btn');
-    const titleEl = document.getElementById('customAlertTitle');
-    const cancelWrapper = document.getElementById('custom-alert-cancel-wrapper');
-    const cancelBtn = document.getElementById('custom-alert-cancel-booking-btn');
-
-    if (titleEl) titleEl.innerText = customTitle || "系統提示";
-
-    const msgStr = String(message);
-    if (customTitle === '實驗室/教室 預約明細' || msgStr.indexOf('預約明細') !== -1) {
-      iconContainer.className = "flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center bg-indigo-100 text-indigo-600";
-      iconContainer.innerHTML = `<svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>`;
-    } else if (msgStr.indexOf('失敗') !== -1 || msgStr.indexOf('錯誤') !== -1 || msgStr.indexOf('無法') !== -1) {
-      iconContainer.className = "flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center bg-rose-100 text-rose-600 animate-pulse";
-      iconContainer.innerHTML = `<svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>`;
-    } else if (msgStr.indexOf('成功') !== -1) {
-      iconContainer.className = "flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center bg-emerald-100 text-emerald-600";
-      iconContainer.innerHTML = `<svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>`;
-    } else {
-      iconContainer.className = "flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center bg-amber-100 text-amber-600";
-      iconContainer.innerHTML = `<svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>`;
-    }
-
-    if (cancelWrapper && cancelBtn) {
-      if (customTitle === '實驗室/教室 預約明細' && customOptions && customOptions.booking) {
-        cancelWrapper.classList.remove('hidden');
-        const booking = customOptions.booking;
-        const email = (typeof currentUserEmail !== 'undefined' ? currentUserEmail : (window.currentUserEmail || '')).toLowerCase().trim();
-        const displayName = (typeof currentUserDisplayName !== 'undefined' ? currentUserDisplayName : (window.currentUserDisplayName || (email ? email.split('@')[0] : ''))).toLowerCase().trim();
-        const role = window.currentAuthRole || 'guest';
-        const isAdmin = (role === 'admin');
-
-        const bEmail = String(booking.email || '').toLowerCase().trim();
-        const bTeacher = String(booking.teacher || '').toLowerCase().trim();
-        const bStudent = String(booking.student || '').toLowerCase().trim();
-        const bUser = String(booking.user || '').toLowerCase().trim();
-
-        const isOwner = email && (
-          (bEmail !== '' && bEmail === email) ||
-          (bUser !== '' && (bUser === displayName || bUser === email.split('@')[0])) ||
-          (bTeacher !== '' && (bTeacher === displayName || bTeacher === email.split('@')[0])) ||
-          (bStudent !== '' && (bStudent === displayName || bStudent === email.split('@')[0]))
-        );
-
-        if (isAdmin || isOwner) {
-          cancelWrapper.removeAttribute('title');
-          cancelWrapper.className = "inline-block";
-          cancelBtn.className = "px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-sm font-semibold transition shadow-sm focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-2 cursor-pointer";
-          cancelBtn.disabled = false;
-          cancelBtn.onclick = function () {
-            handleCancelLabBooking(booking);
-          };
-        } else {
-          cancelWrapper.setAttribute('title', '不能取消其他人預約');
-          cancelWrapper.className = "inline-block cursor-not-allowed";
-          cancelBtn.className = "px-4 py-2 bg-slate-200 text-slate-400 rounded-lg text-sm font-semibold cursor-not-allowed border border-slate-300 pointer-events-none";
-          cancelBtn.disabled = true;
-          cancelBtn.onclick = null;
-        }
-      } else {
-        cancelWrapper.classList.add('hidden');
-        cancelBtn.onclick = null;
-      }
-    }
-
-    msgEl.textContent = message;
-    dialog.showModal();
-    dialog.classList.remove('opacity-0', 'scale-95');
-    dialog.classList.add('opacity-100', 'scale-100');
-
-    const closeDialog = function () {
-      dialog.classList.remove('opacity-100', 'scale-100');
-      dialog.classList.add('opacity-0', 'scale-95');
-      setTimeout(() => { if (dialog.open) dialog.close(); }, 200);
-    };
-
-    if (closeBtn) closeBtn.onclick = closeDialog;
-    if (xBtn) xBtn.onclick = closeDialog;
-
-    if (!('closedBy' in HTMLDialogElement.prototype)) {
-      dialog.onclick = function (event) {
-        if (event.target !== dialog) return;
-        const rect = dialog.getBoundingClientRect();
-        const isDialogContent = (
-          rect.top <= event.clientY && event.clientY <= rect.top + rect.height &&
-          rect.left <= event.clientX && event.clientX <= rect.left + rect.width
-        );
-        if (!isDialogContent) closeDialog();
-      };
-    }
-  };
-
-  // 美化版自訂 confirm 視窗 (回傳 Promise)
-  window.showConfirm = function (message) {
-    return new Promise((resolve) => {
-      const dialog = document.getElementById('custom-confirm-dialog');
-      if (!dialog) { resolve(false); return; }
-
-      const msgEl = document.getElementById('custom-confirm-message');
-      const okBtn = document.getElementById('custom-confirm-ok-btn');
-      const cancelBtn = document.getElementById('custom-confirm-cancel-btn');
-      const xBtn = document.getElementById('custom-confirm-x-btn');
-
-      msgEl.textContent = message;
-      dialog.showModal();
-      dialog.classList.remove('opacity-0', 'scale-95');
-      dialog.classList.add('opacity-100', 'scale-100');
-
-      let isResolved = false;
-      const finish = (result) => {
-        if (isResolved) return;
-        isResolved = true;
-        resolve(result);
-      };
-
-      const closeWithResult = function (result) {
-        if (isResolved) return;
-        dialog.classList.remove('opacity-100', 'scale-100');
-        dialog.classList.add('opacity-0', 'scale-95');
-        setTimeout(() => {
-          if (dialog.open) dialog.close();
-          finish(result);
-        }, 200);
-      };
-
-      if (okBtn) okBtn.onclick = () => closeWithResult(true);
-      if (cancelBtn) cancelBtn.onclick = () => closeWithResult(false);
-      if (xBtn) xBtn.onclick = () => closeWithResult(false);
-
-      // 支援 Esc 鍵或其他原生關閉視窗時順利釋放 Promise
-      dialog.onclose = () => finish(false);
-      dialog.oncancel = () => finish(false);
-
-      if (!('closedBy' in HTMLDialogElement.prototype)) {
-        dialog.onclick = function (event) {
-          if (event.target !== dialog) return;
-          const rect = dialog.getBoundingClientRect();
-          const isDialogContent = (
-            rect.top <= event.clientY && event.clientY <= rect.top + rect.height &&
-            rect.left <= event.clientX && event.clientX <= rect.left + rect.width
-          );
-          if (!isDialogContent) closeWithResult(false);
-        };
-      }
-    });
-  };
-
-  // 用於選項的自訂彈窗
-  window.showSelectModal = function (title, optionsList) {
-    return new Promise((resolve) => {
-      let dialog = document.getElementById('custom-select-dialog');
-      if (!dialog) {
-        const html = `
-          <dialog id="custom-select-dialog" class="rounded-2xl shadow-2xl border border-slate-200 p-0 max-w-sm w-full bg-white overflow-hidden transition-all duration-200 opacity-0 scale-95" closedby="any">
-            <div class="flex flex-col">
-              <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center shrink-0">
-                <h3 id="custom-select-title" class="text-lg font-bold text-slate-900"></h3>
-              </div>
-              <div class="p-6 overflow-y-auto flex-1">
-                <div id="custom-select-options" class="flex flex-col space-y-3"></div>
-              </div>
-              <div class="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-end items-center gap-3 shrink-0">
-                <button id="custom-select-cancel-btn" type="button" class="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 rounded-lg text-sm font-semibold transition border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-300">取消</button>
-                <button id="custom-select-ok-btn" type="button" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500">確定</button>
-              </div>
-            </div>
-          </dialog>
-        `;
-        document.body.insertAdjacentHTML('beforeend', html);
-        dialog = document.getElementById('custom-select-dialog');
-      }
-
-      document.getElementById('custom-select-title').textContent = title;
-      const optsContainer = document.getElementById('custom-select-options');
-      optsContainer.innerHTML = '';
-      
-      optionsList.forEach((opt, idx) => {
-        const checked = idx === 0 ? 'checked' : '';
-        optsContainer.insertAdjacentHTML('beforeend', `
-          <label class="flex items-center space-x-3 p-3 border rounded-lg cursor-pointer hover:bg-blue-50 transition border-slate-200 hover:border-blue-300">
-            <input type="radio" name="batch-status-radio" value="${opt.value}" class="w-4 h-4 text-blue-600 focus:ring-blue-500 border-slate-300" ${checked}>
-            <span class="text-slate-800 font-medium">${opt.label}</span>
-          </label>
-        `);
-      });
-
-      const okBtn = document.getElementById('custom-select-ok-btn');
-      const cancelBtn = document.getElementById('custom-select-cancel-btn');
-
-      dialog.showModal();
-      dialog.classList.remove('opacity-0', 'scale-95');
-      dialog.classList.add('opacity-100', 'scale-100');
-
-      let isResolved = false;
-      const finish = (result) => {
-        if (isResolved) return;
-        isResolved = true;
-        dialog.classList.remove('opacity-100', 'scale-100');
-        dialog.classList.add('opacity-0', 'scale-95');
-        setTimeout(() => { if (dialog.open) dialog.close(); resolve(result); }, 200);
-      };
-
-      if (okBtn) okBtn.onclick = () => {
-        const selected = document.querySelector('input[name="batch-status-radio"]:checked');
-        finish(selected ? selected.value : null);
-      };
-      if (cancelBtn) cancelBtn.onclick = () => finish(null);
-      
-      dialog.onclose = () => finish(null);
-      dialog.oncancel = () => finish(null);
-      
-      if (!('closedBy' in HTMLDialogElement.prototype)) {
-        dialog.onclick = function (event) {
-          if (event.target !== dialog) return;
-          const rect = dialog.getBoundingClientRect();
-          const isDialogContent = (
-            rect.top <= event.clientY && event.clientY <= rect.top + rect.height &&
-            rect.left <= event.clientX && event.clientX <= rect.left + rect.width
-          );
-          if (!isDialogContent) finish(null);
-        };
-      }
-    });
-  };
-
-  // 共用函式：將 Google Drive 網址轉換為縮圖網址 (防止破圖)
-  window.getDriveImageUrl = function(url, size = 100) {
-    if (!url || typeof url !== 'string') return url;
-    let driveId = null;
-    const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
-    if (match && match[1]) {
-      driveId = match[1];
-    } else if (url.includes('id=')) {
-      const idMatch = url.match(/id=([a-zA-Z0-9_-]+)/);
-      if (idMatch && idMatch[1]) {
-        driveId = idMatch[1];
-      }
-    }
-    return driveId ? `https://drive.google.com/thumbnail?id=${driveId}&sz=w${size}` : url;
-  };
-
-  window.openImageModal = function(url) {
-    const modal = document.getElementById('image-modal');
-    const img = document.getElementById('image-modal-img');
-    if (modal && img) {
-      img.src = window.getDriveImageUrl(url, 1000);
-      modal.classList.remove('hidden');
-      modal.classList.add('flex');
-      // trigger reflow
-      void modal.offsetWidth;
-      modal.classList.remove('opacity-0');
-      modal.querySelector('div').classList.remove('scale-95');
-      modal.querySelector('div').classList.add('scale-100');
-    }
-  };
-
-  window.closeImageModal = function() {
-    const modal = document.getElementById('image-modal');
-    if (modal) {
-      modal.classList.add('opacity-0');
-      modal.querySelector('div').classList.remove('scale-100');
-      modal.querySelector('div').classList.add('scale-95');
-      setTimeout(() => {
-        modal.classList.add('hidden');
-        modal.classList.remove('flex');
-      }, 300);
-    }
-  };
 </script>

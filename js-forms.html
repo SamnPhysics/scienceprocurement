@@ -1,17 +1,23 @@
 <script>
   // ==========================================
-  // js-forms.html — 申請表單提交與圖片上傳
-  // 職責：三大表單提交、圖片拖放、表單重置
-  // 包含優化C：initImageDropZone 共用拖放初始化函數
-  // 載入順序：依賴 js-core.html、js-auth.html
+  // Module: js-forms.html
+  // Responsibility: 處理前端三大表單 (藥品請購、設備申請、設備借用) 的欄位驗證、提交邏輯、圖片拖放上傳預覽，以及 Excel 批次匯入功能。
+  // Dependencies: js-core.html (提供 ApiService, AppState), js-auth.html, XLSX (用於 Excel 匯入)
+  // Exports: handleGenericSubmit, initImageDropZone, resetChemForm, resetEquipForm, resetEquipBorrowForm, toggleCategoryFields, downloadChemTemplate, handleChemImport
   // ==========================================
 
   // ==========================================
   // 共用表單輔助函數 (Shared Utilities)
   // ==========================================
 
+  /**
+   * 驗證使用者信箱是否為指定的學校網域
+   * @param {string} emailVal - 欲驗證的信箱
+   * @param {string} actionName - 觸發此驗證的動作名稱 (用於提示訊息)
+   * @returns {string|boolean} 驗證通過回傳小寫信箱，否則回傳 false
+   */
   function validateUserDomain(emailVal, actionName = '送出申請') {
-    const email = (emailVal || currentUserEmail || '').toLowerCase();
+    const email = (emailVal || AppState.currentUserEmail || '').toLowerCase();
     if (!email.endsWith('@' + allowedDomain)) {
       alert('請先登入 @' + allowedDomain + ' 帳號後再' + actionName + '。');
       return false;
@@ -19,12 +25,23 @@
     return email;
   }
 
+  /**
+   * 設定表單送出按鈕的 Loading 狀態與文字
+   * @param {HTMLButtonElement} btn - 按鈕元素
+   * @param {boolean} isLoading - 是否為載入中狀態
+   * @param {string} originalText - 原始按鈕文字
+   */
   function setSubmitButtonLoading(btn, isLoading, originalText = '送出申請') {
     if (!btn) return;
     btn.disabled = isLoading;
     btn.innerHTML = isLoading ? '<span>處理中...請稍候</span>' : `<span>${originalText}</span>`;
   }
 
+  /**
+   * 將 File 物件轉換為 Base64 字串供後端儲存
+   * @param {File} file - 欲轉換的圖片檔案
+   * @returns {Promise<{base64: string, name: string}|null>}
+   */
   function fileToBase64(file) {
     return new Promise((resolve, reject) => {
       if (!file) {
@@ -38,7 +55,9 @@
     });
   }
 
-  // 動態切換液態藥品濃度輸入格及自定義分類輸入格
+  /**
+   * 藥品請購表單專用：動態切換「液態藥品」濃度/容量輸入格，以及「其他」分類的自定義輸入格
+   */
   function toggleCategoryFields() {
     const cat = DOM.category.value;
     const blockConc = DOM.concentrationBlock;
@@ -69,7 +88,11 @@
     }
   }
 
-  // 整合後的表單清除重填通用邏輯
+  /**
+   * 整合後的表單清除與重填通用邏輯
+   * 送出成功後，會清空表單並自動將登入者的姓名/信箱填回預設欄位
+   * @param {string} type - 表單類型 ('chem', 'equip', 'equipBorrow')
+   */
   function resetForm(type) {
     const configs = {
       chem: { formId: 'appForm', prefix: '', hasImg: true, imgPrefix: '', callback: () => { if (typeof toggleCategoryFields === 'function') toggleCategoryFields(); } },
@@ -83,8 +106,8 @@
     const form = document.getElementById(config.formId);
     if (form) form.reset();
 
-    const applicantVal = currentUserDisplayName || (currentUserEmail ? currentUserEmail.split('@')[0] : '尚未登入');
-    const emailVal = currentUserEmail || '尚未登入';
+    const applicantVal = AppState.currentUserDisplayName || (AppState.currentUserEmail ? AppState.currentUserEmail.split('@')[0] : '尚未登入');
+    const emailVal = AppState.currentUserEmail || '尚未登入';
 
     const applicantInput = document.getElementById(config.prefix + 'applicant');
     const emailInput = document.getElementById(config.prefix + 'email');
@@ -102,7 +125,11 @@
   function resetEquipForm() { resetForm('equip'); }
   function resetEquipBorrowForm() { resetForm('equipBorrow'); }
 
-  // 圖片預覽顯示
+  /**
+   * 顯示圖片預覽 (Thumbnail) 於表單上方
+   * @param {File} file - 圖片檔案
+   * @param {string} prefix - 表單前綴名稱 (用於抓取對應的預覽容器 ID)
+   */
   function showPreview(file, prefix) {
     const idPrefix = prefix ? (prefix + '_') : '';
     const previewContainer = document.getElementById(idPrefix + 'preview-container');
@@ -111,15 +138,21 @@
     const imageFilename = document.getElementById(idPrefix + 'image-filename');
 
     const reader = new FileReader();
-    reader.onload = function (e) {
+    reader.onload = async (e) => {
       imagePreview.src = e.target.result;
       imageFilename.textContent = file.name || '貼上的圖片.png';
       uploadPrompt.classList.add('hidden');
       previewContainer.classList.remove('hidden');
+      previewContainer.classList.add('inline-block');
     };
     reader.readAsDataURL(file);
   }
 
+  /**
+   * 清除目前已選擇/預覽的圖片
+   * @param {Event} e - 點擊事件
+   * @param {string} prefix - 表單前綴名稱
+   */
   function removeImage(e, prefix) {
     if (e) e.stopPropagation();
     const idPrefix = prefix ? (prefix + '_') : '';
@@ -130,11 +163,20 @@
 
     if (fileInput) fileInput.value = '';
     if (imagePreview) imagePreview.src = '';
-    if (previewContainer) previewContainer.classList.add('hidden');
+    if (previewContainer) {
+      previewContainer.classList.add('hidden');
+      previewContainer.classList.remove('inline-block');
+    }
     if (uploadPrompt) uploadPrompt.classList.remove('hidden');
   }
 
-  // 優化C：通用圖片拖放初始化（消除 chem / equipBorrow 的重複拖放邏輯）
+  /**
+   * 通用圖片拖放初始化 (Drag & Drop)
+   * 消除了過去各表單重複的拖放監聽邏輯
+   * @param {string} zoneId - 拖放感應區的 HTML ID
+   * @param {string} fileInputId - 實際 input[type="file"] 的 HTML ID
+   * @param {string} prefix - 預覽容器的前綴名稱
+   */
   function initImageDropZone(zoneId, fileInputId, prefix) {
     const zone = document.getElementById(zoneId);
     const input = document.getElementById(fileInputId);
@@ -171,156 +213,125 @@
     });
   }
 
-  // 表單提交：藥品請購
-  async function handleFormSubmit(e) {
+  /**
+   * 表單送出參數配置表
+   * 集中管理三個主要表單的按鈕 ID、檔案欄位、後端 API 函數與資料萃取邏輯
+   */
+  const FORM_CONFIG = {
+    chem: {
+      submitBtnId: 'submitBtn',
+      fileInputId: 'photoFile',
+      backendFn: 'submitChem',
+      cacheKeys: ['user_chem', 'admin_chem'],
+      resetFn: resetChemForm,
+      btnLoadingText: '送出請購',
+      extractData: () => {
+        let selectedCategory = DOM.category.value;
+        if (selectedCategory === '其他') selectedCategory = DOM.otherCategory.value;
+        return {
+          applicant: DOM.applicant.value,
+          email: AppState.currentUserEmail,
+          chineseName: DOM.chineseName.value,
+          englishName: DOM.englishName.value,
+          quantity: DOM.quantity.value + ' ' + DOM.unit.value,
+          category: selectedCategory,
+          concentration: DOM.concentration.value,
+          volume: DOM.volume.value,
+          usageTime: DOM.usageTime.value,
+          subject: document.querySelector('input[name="subject"]:checked')?.value || '',
+          remark: DOM.remark.value
+        };
+      }
+    },
+    equip: {
+      submitBtnId: 'equip_submitBtn',
+      fileInputId: 'equip_photoFile',
+      backendFn: 'submitEquip',
+      cacheKeys: ['user_equip', 'admin_equip'],
+      resetFn: resetEquipForm,
+      btnLoadingText: '送出申請',
+      extractData: () => {
+        return {
+          applySubject: document.getElementById('equip_applySubject')?.value || '',
+          equipName: document.getElementById('equip_name')?.value || '',
+          quantity: document.getElementById('equip_quantity')?.value || '',
+          price: document.getElementById('equip_price')?.value || '',
+          purpose: document.getElementById('equip_purpose')?.value || '',
+          isSyllabus: document.querySelector('input[name="isSyllabus"]:checked')?.value || '',
+          location: document.querySelector('input[name="location"]:checked')?.value || '',
+          correspondSubject: document.getElementById('equip_correspondSubject')?.value || ''
+        };
+      }
+    },
+    equipBorrow: {
+      submitBtnId: 'equipBorrow_submitBtn',
+      fileInputId: 'equipBorrow_photoFile',
+      backendFn: 'submitEquipBorrow',
+      cacheKeys: ['user_equipBorrow', 'admin_equipBorrow'],
+      resetFn: resetEquipBorrowForm,
+      btnLoadingText: '送出借用申請',
+      extractData: () => {
+        const baseItem = (document.getElementById('equipBorrow_item')?.value || '').trim();
+        const propertyNumber = (document.getElementById('equipBorrow_propertyNumber')?.value || '').trim();
+        const finalItem = propertyNumber ? `${baseItem} (財標序號: ${propertyNumber})` : baseItem;
+        return {
+          applicant: document.getElementById('equipBorrow_applicant')?.value || '',
+          email: AppState.currentUserEmail,
+          department: document.getElementById('equipBorrow_department')?.value || '',
+          item: finalItem,
+          quantity: document.getElementById('equipBorrow_quantity')?.value || '',
+          purpose: document.getElementById('equipBorrow_purpose')?.value || '',
+          remark: document.getElementById('equipBorrow_remark')?.value || '',
+          system: 'equipBorrow'
+        };
+      }
+    }
+  };
+
+  /**
+   * 通用表單提交處理函數
+   * @param {Event} e - 表單的 submit 事件
+   * @param {string} formType - 表單類型 ('chem', 'equip', 'equipBorrow')
+   */
+  async function handleGenericSubmit(e, formType) {
     e.preventDefault();
-    const emailVal = validateUserDomain(DOM.email.value, '送出請購');
+    const config = FORM_CONFIG[formType];
+    if (!config) return;
+
+    const emailVal = validateUserDomain(AppState.currentUserEmail, config.btnLoadingText);
     if (!emailVal) return;
 
-    setSubmitButtonLoading(DOM.submitBtn, true);
+    const submitBtn = document.getElementById(config.submitBtnId);
+    setSubmitButtonLoading(submitBtn, true, config.btnLoadingText);
 
-    let selectedCategory = DOM.category.value;
-    if (selectedCategory === '其他') selectedCategory = DOM.otherCategory.value;
-
-    const fileInput = DOM.photoFile;
-    const photoData = await fileToBase64(fileInput.files[0]);
-
-    const formData = {
-      applicant: DOM.applicant.value,
-      email: emailVal,
-      chineseName: DOM.chineseName.value,
-      englishName: DOM.englishName.value,
-      quantity: DOM.quantity.value + ' ' + DOM.unit.value,
-      category: selectedCategory,
-      concentration: DOM.concentration.value,
-      volume: DOM.volume.value,
-      usageTime: DOM.usageTime.value,
-      subject: document.querySelector('input[name="subject"]:checked').value,
-      remark: DOM.remark.value,
-      photoBase64: photoData ? photoData.base64 : null,
-      photoName: photoData ? photoData.name : null
-    };
-
-    sendDataToBackend(formData);
-  }
-
-  function sendDataToBackend(formData) {
-    google.script.run
-      .withSuccessHandler(function (response) {
-        alert(response.message);
-        if (response.success) {
-          if (window.SystemCache) { window.SystemCache.invalidate('user_chem'); window.SystemCache.invalidate('admin_chem'); }
-          resetChemForm();
-          if (typeof refreshDatalist === 'function') refreshDatalist();
-        }
-        setSubmitButtonLoading(DOM.submitBtn, false, '送出請購');
-      })
-      .withFailureHandler(function (err) {
-        alert('提交失敗: ' + err);
-        setSubmitButtonLoading(DOM.submitBtn, false, '送出請購');
-      })
-      .submitApplication(formData, getToken());
-  }
-
-  // 表單提交：設備申請
-  async function handleEquipFormSubmit(e) {
-    e.preventDefault();
-    const emailVal = validateUserDomain(currentUserEmail, '送出申請');
-    if (!emailVal) return;
-
-    const submitBtn = document.getElementById('equip_submitBtn');
-    setSubmitButtonLoading(submitBtn, true);
-
-    const fileInput = document.getElementById('equip_photoFile');
+    const fileInput = document.getElementById(config.fileInputId);
     const file = fileInput ? fileInput.files[0] : null;
-    const photoData = await fileToBase64(file);
+    
+    try {
+      const photoData = await fileToBase64(file);
+      const formData = config.extractData();
+      if (photoData) {
+        formData.photoBase64 = photoData.base64;
+        formData.photoName = photoData.name;
+      }
 
-    const formData = {
-      applySubject: document.getElementById('equip_applySubject')?.value || '',
-      equipName: document.getElementById('equip_name')?.value || '',
-      quantity: document.getElementById('equip_quantity')?.value || '',
-      price: document.getElementById('equip_price')?.value || '',
-      purpose: document.getElementById('equip_purpose')?.value || '',
-      isSyllabus: document.querySelector('input[name="isSyllabus"]:checked')?.value || '',
-      location: document.querySelector('input[name="location"]:checked')?.value || '',
-      correspondSubject: document.getElementById('equip_correspondSubject')?.value || '',
-      photoBase64: photoData ? photoData.base64 : null,
-      photoName: photoData ? photoData.name : null
-    };
-
-    sendEquipDataToBackend(formData);
-  }
-
-  function sendEquipDataToBackend(formData) {
-    google.script.run
-      .withSuccessHandler(function (response) {
+      const response = await ApiService.form[config.backendFn](formData, getToken());
+      
+      setSubmitButtonLoading(submitBtn, false, config.btnLoadingText);
+      if (response.success) {
         alert(response.message);
-        const submitBtn = document.getElementById('equip_submitBtn');
-        setSubmitButtonLoading(submitBtn, false);
-        if (response.success) {
-          if (window.SystemCache) { window.SystemCache.invalidate('user_equip'); window.SystemCache.invalidate('admin_equip'); }
-          resetEquipForm();
-          if (typeof refreshDatalist === 'function') refreshDatalist();
+        if (window.SystemCache) {
+          config.cacheKeys.forEach(key => window.SystemCache.invalidate(key));
         }
-      })
-      .withFailureHandler(function (error) {
-        alert('提交失敗：' + error);
-        const submitBtn = document.getElementById('equip_submitBtn');
-        setSubmitButtonLoading(submitBtn, false);
-      })
-      .submitEquipApplication(formData, getToken());
-  }
-
-  // 表單提交：設備借用
-  async function handleEquipBorrowFormSubmit(e) {
-    e.preventDefault();
-    const emailVal = validateUserDomain(currentUserEmail, '送出申請');
-    if (!emailVal) return;
-
-    const submitBtn = document.getElementById('equipBorrow_submitBtn');
-    setSubmitButtonLoading(submitBtn, true);
-
-    const baseItem = (document.getElementById('equipBorrow_item')?.value || '').trim();
-    const propertyNumber = (document.getElementById('equipBorrow_propertyNumber')?.value || '').trim();
-    const finalItem = propertyNumber ? `${baseItem} (財標序號: ${propertyNumber})` : baseItem;
-
-    const fileInput = document.getElementById('equipBorrow_photoFile');
-    const file = fileInput ? fileInput.files[0] : null;
-    const photoData = await fileToBase64(file);
-
-    const formData = {
-      applicant: document.getElementById('equipBorrow_applicant')?.value || '',
-      email: emailVal,
-      department: document.getElementById('equipBorrow_department')?.value || '',
-      item: finalItem,
-      quantity: document.getElementById('equipBorrow_quantity')?.value || '',
-      purpose: document.getElementById('equipBorrow_purpose')?.value || '',
-      remark: document.getElementById('equipBorrow_remark')?.value || '',
-      system: 'equipBorrow',
-      photoBase64: photoData ? photoData.base64 : null,
-      photoName: photoData ? photoData.name : null
-    };
-
-    sendEquipBorrowDataToBackend(formData, submitBtn);
-  }
-
-  function sendEquipBorrowDataToBackend(formData, submitBtn) {
-    google.script.run
-      .withSuccessHandler(function (response) {
-        setSubmitButtonLoading(submitBtn, false, '送出借用申請');
-        if (response.success) {
-          alert(response.message);
-          if (window.SystemCache) { window.SystemCache.invalidate('user_equipBorrow'); window.SystemCache.invalidate('admin_equipBorrow'); }
-          resetEquipBorrowForm();
-          if (typeof refreshDatalist === 'function') refreshDatalist();
-        }
-        else alert('送出失敗: ' + response.message);
-      })
-      .withFailureHandler(function (error) {
-        setSubmitButtonLoading(submitBtn, false, '送出借用申請');
-        alert('系統錯誤: ' + (error.message || error));
-      })
-      .submitEquipBorrowApplication(formData, getToken());
+        if (config.resetFn) config.resetFn();
+        if (typeof refreshDatalist === 'function') refreshDatalist();
+      } else {
+        alert('送出失敗: ' + (response.message || '未知錯誤'));
+      }
+    } catch (error) {
+      setSubmitButtonLoading(submitBtn, false, config.btnLoadingText);
+      alert('系統錯誤: ' + (error.message || error));
+    }
   }
 
   // 初始化所有圖片上傳區域（使用優化C的共用函數）
@@ -346,13 +357,13 @@
           const dataTransfer = new DataTransfer();
           dataTransfer.items.add(blob);
 
-          if (currentSystemTab === 'equipBorrow') {
+          if (AppState.currentSystemTab === 'equipBorrow') {
             const ebFileInput = document.getElementById('equipBorrow_photoFile');
             if (ebFileInput) {
               ebFileInput.files = dataTransfer.files;
               showPreview(blob, 'equipBorrow');
             }
-          } else if (currentSystemTab === 'equip') {
+          } else if (AppState.currentSystemTab === 'equip') {
             const equipFileInput = document.getElementById('equip_photoFile');
             if (equipFileInput) {
               equipFileInput.files = dataTransfer.files;
@@ -376,6 +387,9 @@
   // ==========================================
   // 藥品/物品 批次匯入功能
   // ==========================================
+  /**
+   * 下載藥品/物品批次匯入的 Excel 範本檔案
+   */
   function downloadChemTemplate() {
     if (typeof XLSX === 'undefined') {
       alert('無法載入 Excel 處理函式庫，請重新整理網頁後再試。');
@@ -402,6 +416,11 @@
     XLSX.writeFile(wb, "藥品物品請購範本.xlsx");
   }
 
+  /**
+   * 處理藥品/物品的 Excel 批次匯入邏輯
+   * 透過 SheetJS 解析檔案內容，檢查格式，最後呼叫後端 API 批次寫入
+   * @param {Event} event - file input 的 change 事件
+   */
   function handleChemImport(event) {
     const file = event.target.files[0];
     if (!file) return;
@@ -412,14 +431,14 @@
       return;
     }
 
-    const emailVal = validateUserDomain(currentUserEmail, '進行匯入');
+    const emailVal = validateUserDomain(AppState.currentUserEmail, '進行匯入');
     if (!emailVal) {
       event.target.value = '';
       return;
     }
 
     const reader = new FileReader();
-    reader.onload = async function (e) {
+    reader.onload = async (e) => {
       try {
         const data = new Uint8Array(e.target.result);
         const workbook = XLSX.read(data, { type: 'array' });
@@ -438,7 +457,7 @@
         }
 
         const validForms = [];
-        const applicantVal = currentUserDisplayName || (currentUserEmail ? currentUserEmail.split('@')[0] : '');
+        const applicantVal = AppState.currentUserDisplayName || (AppState.currentUserEmail ? AppState.currentUserEmail.split('@')[0] : '');
 
         // 防呆：範本文字
         const templateExampleName = '氯化鈉';
@@ -496,18 +515,16 @@
           // 呼叫後端批次寫入
           setSubmitButtonLoading(DOM.submitBtn, true);
 
-          google.script.run
-            .withSuccessHandler(function (response) {
-              alert(response.message);
-              setSubmitButtonLoading(DOM.submitBtn, false, '送出請購');
-              event.target.value = '';
-            })
-            .withFailureHandler(function (err) {
-              alert('批次匯入失敗: ' + err);
-              setSubmitButtonLoading(DOM.submitBtn, false, '送出請購');
-              event.target.value = '';
-            })
-            .batchSubmitApplication(validForms, getToken());
+          try {
+            const response = await ApiService.form.batchSubmitChem(validForms, getToken());
+            alert(response.message);
+            setSubmitButtonLoading(DOM.submitBtn, false, '送出請購');
+            event.target.value = '';
+          } catch (err) {
+            alert('批次匯入失敗: ' + (err.message || err));
+            setSubmitButtonLoading(DOM.submitBtn, false, '送出請購');
+            event.target.value = '';
+          }
         } else {
           event.target.value = ''; // 取消匯入
         }

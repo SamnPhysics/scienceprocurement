@@ -1,0 +1,288 @@
+<script>
+  // ==========================================
+  // Module: js-ui-utility.html
+  // Responsibility: 提供全域的 UI 輔助工具函式，包含覆寫原生的 alert/confirm，以及提供共用的客製化彈窗 (Modal)、圖片燈箱 (Lightbox) 等視覺增強工具。
+  // Dependencies: (無，可獨立運行)
+  // Exports: window.alert, window.showConfirm, window.showSelectModal, window.getDriveImageUrl, window.openImageModal, window.closeImageModal
+  // ==========================================
+
+  // 保留原生 alert 以備不時之需
+  window.alert.native = window.alert.native || window.alert;
+
+  /**
+   * 覆寫瀏覽器預設的 alert 視窗，使用 Tailwind CSS 客製化的 Modal 替代
+   * @param {string} message - 要顯示的訊息內容
+   * @param {string} [customTitle=null] - 自訂標題 (預設為 '系統提示')
+   * @param {Object} [customOptions=null] - (保留擴充用) 自訂選項
+   */
+  window.alert = function (message, customTitle = null, customOptions = null) {
+    const dialog = document.getElementById('custom-alert-dialog');
+    if (!dialog) {
+      console.warn('找不到 custom-alert-dialog，改用原生 alert:', message);
+      // 若尚未載入自訂 HTML，退回原生 (使用原生的寫法避免無限遞迴)
+      window.alert.native(message);
+      return;
+    }
+
+    const msgEl = document.getElementById('custom-alert-message');
+    const iconContainer = document.getElementById('alert-icon-container');
+    const closeBtn = document.getElementById('custom-alert-close-btn');
+    const xBtn = document.getElementById('custom-alert-x-btn');
+    const titleEl = document.getElementById('customAlertTitle');
+    const cancelWrapper = document.getElementById('custom-alert-cancel-wrapper');
+    const cancelBtn = document.getElementById('custom-alert-cancel-booking-btn');
+
+    if (titleEl) titleEl.innerText = customTitle || "系統提示";
+
+    const msgStr = String(message);
+    if (msgStr.indexOf('失敗') !== -1 || msgStr.indexOf('錯誤') !== -1 || msgStr.indexOf('無法') !== -1) {
+      iconContainer.className = "flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center bg-rose-100 text-rose-600 animate-pulse";
+      iconContainer.innerHTML = `<svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>`;
+    } else if (msgStr.indexOf('成功') !== -1) {
+      iconContainer.className = "flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center bg-emerald-100 text-emerald-600";
+      iconContainer.innerHTML = `<svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>`;
+    } else {
+      iconContainer.className = "flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center bg-amber-100 text-amber-600";
+      iconContainer.innerHTML = `<svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>`;
+    }
+
+    if (cancelWrapper && cancelBtn) {
+      cancelWrapper.classList.add('hidden');
+      cancelBtn.onclick = null;
+    }
+
+    msgEl.textContent = message;
+    dialog.showModal();
+    void dialog.offsetWidth; // 觸發 reflow 確保動畫執行
+    dialog.classList.remove('opacity-0', 'scale-95');
+    dialog.classList.add('opacity-100', 'scale-100');
+
+    const closeDialog = function () {
+      dialog.classList.remove('opacity-100', 'scale-100');
+      dialog.classList.add('opacity-0', 'scale-95');
+      setTimeout(() => { if (dialog.open) dialog.close(); }, 200);
+    };
+
+    if (closeBtn) closeBtn.onclick = closeDialog;
+    if (xBtn) xBtn.onclick = closeDialog;
+
+    if (!('closedBy' in HTMLDialogElement.prototype)) {
+      dialog.onclick = function (event) {
+        if (event.target !== dialog) return;
+        const rect = dialog.getBoundingClientRect();
+        const isDialogContent = (
+          rect.top <= event.clientY && event.clientY <= rect.top + rect.height &&
+          rect.left <= event.clientX && event.clientX <= rect.left + rect.width
+        );
+        if (!isDialogContent) closeDialog();
+      };
+    }
+  };
+
+  /**
+   * 美化版自訂 confirm 視窗
+   * 替代瀏覽器原生的 confirm，並回傳 Promise 方便使用 async/await 處理
+   * @param {string} message - 要詢問使用者的訊息內容
+   * @returns {Promise<boolean>} 使用者點擊「確定」(true) 或「取消」(false)
+   */
+  window.showConfirm = function (message) {
+    return new Promise((resolve) => {
+      const dialog = document.getElementById('custom-confirm-dialog');
+      if (!dialog) {
+        // fallback
+        resolve(window.confirm(message));
+        return;
+      }
+
+      const msgEl = document.getElementById('custom-confirm-message');
+      const okBtn = document.getElementById('custom-confirm-ok-btn');
+      const cancelBtn = document.getElementById('custom-confirm-cancel-btn');
+      const xBtn = document.getElementById('custom-confirm-x-btn');
+
+      msgEl.textContent = message;
+      dialog.showModal();
+      void dialog.offsetWidth; // 觸發 reflow 確保動畫執行
+      dialog.classList.remove('opacity-0', 'scale-95');
+      dialog.classList.add('opacity-100', 'scale-100');
+
+      let isResolved = false;
+      const finish = (result) => {
+        if (isResolved) return;
+        isResolved = true;
+        resolve(result);
+      };
+
+      const closeWithResult = function (result) {
+        if (isResolved) return;
+        dialog.classList.remove('opacity-100', 'scale-100');
+        dialog.classList.add('opacity-0', 'scale-95');
+        setTimeout(() => {
+          if (dialog.open) dialog.close();
+          finish(result);
+        }, 200);
+      };
+
+      if (okBtn) okBtn.onclick = () => closeWithResult(true);
+      if (cancelBtn) cancelBtn.onclick = () => closeWithResult(false);
+      if (xBtn) xBtn.onclick = () => closeWithResult(false);
+
+      // 支援 Esc 鍵或其他原生關閉視窗時順利釋放 Promise
+      dialog.onclose = () => finish(false);
+      dialog.oncancel = () => finish(false);
+
+      if (!('closedBy' in HTMLDialogElement.prototype)) {
+        dialog.onclick = function (event) {
+          if (event.target !== dialog) return;
+          const rect = dialog.getBoundingClientRect();
+          const isDialogContent = (
+            rect.top <= event.clientY && event.clientY <= rect.top + rect.height &&
+            rect.left <= event.clientX && event.clientX <= rect.left + rect.width
+          );
+          if (!isDialogContent) closeWithResult(false);
+        };
+      }
+    });
+  };
+
+  /**
+   * 顯示客製化的選項選擇彈窗 (如：批次更新狀態選擇)
+   * 回傳 Promise 供非同步等待使用者選擇結果
+   * @param {string} title - 彈窗標題
+   * @param {Array<{label: string, value: string}>} optionsList - 供選擇的選項清單
+   * @returns {Promise<string|null>} 使用者選擇的 value，若點擊取消則回傳 null
+   */
+  window.showSelectModal = function (title, optionsList) {
+    return new Promise((resolve) => {
+      let dialog = document.getElementById('custom-select-dialog');
+      if (!dialog) {
+        const html = `
+          <dialog id="custom-select-dialog" class="rounded-2xl shadow-2xl border border-slate-200 p-0 max-w-sm w-full bg-white overflow-hidden transition-all duration-200 opacity-0 scale-95" closedby="any">
+            <div class="flex flex-col">
+              <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center shrink-0">
+                <h3 id="custom-select-title" class="text-lg font-bold text-slate-900"></h3>
+              </div>
+              <div class="p-6 overflow-y-auto flex-1">
+                <div id="custom-select-options" class="flex flex-col space-y-3"></div>
+              </div>
+              <div class="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-end items-center gap-3 shrink-0">
+                <button id="custom-select-cancel-btn" type="button" class="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 rounded-lg text-sm font-semibold transition border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-300">取消</button>
+                <button id="custom-select-ok-btn" type="button" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500">確定</button>
+              </div>
+            </div>
+          </dialog>
+        `;
+        document.body.insertAdjacentHTML('beforeend', html);
+        dialog = document.getElementById('custom-select-dialog');
+      }
+
+      document.getElementById('custom-select-title').textContent = title;
+      const optsContainer = document.getElementById('custom-select-options');
+      optsContainer.innerHTML = '';
+
+      optionsList.forEach((opt, idx) => {
+        const checked = idx === 0 ? 'checked' : '';
+        optsContainer.insertAdjacentHTML('beforeend', `
+          <label class="flex items-center space-x-3 p-3 border rounded-lg cursor-pointer hover:bg-blue-50 transition border-slate-200 hover:border-blue-300">
+            <input type="radio" name="batch-status-radio" value="${opt.value}" class="w-4 h-4 text-blue-600 focus:ring-blue-500 border-slate-300" ${checked}>
+            <span class="text-slate-800 font-medium">${opt.label}</span>
+          </label>
+        `);
+      });
+
+      const okBtn = document.getElementById('custom-select-ok-btn');
+      const cancelBtn = document.getElementById('custom-select-cancel-btn');
+
+      dialog.showModal();
+      void dialog.offsetWidth; // 觸發 reflow 確保動畫執行
+      dialog.classList.remove('opacity-0', 'scale-95');
+      dialog.classList.add('opacity-100', 'scale-100');
+
+      let isResolved = false;
+      const finish = (result) => {
+        if (isResolved) return;
+        isResolved = true;
+        dialog.classList.remove('opacity-100', 'scale-100');
+        dialog.classList.add('opacity-0', 'scale-95');
+        setTimeout(() => { if (dialog.open) dialog.close(); resolve(result); }, 200);
+      };
+
+      if (okBtn) okBtn.onclick = () => {
+        const selected = document.querySelector('input[name="batch-status-radio"]:checked');
+        finish(selected ? selected.value : null);
+      };
+      if (cancelBtn) cancelBtn.onclick = () => finish(null);
+
+      dialog.onclose = () => finish(null);
+      dialog.oncancel = () => finish(null);
+
+      if (!('closedBy' in HTMLDialogElement.prototype)) {
+        dialog.onclick = function (event) {
+          if (event.target !== dialog) return;
+          const rect = dialog.getBoundingClientRect();
+          const isDialogContent = (
+            rect.top <= event.clientY && event.clientY <= rect.top + rect.height &&
+            rect.left <= event.clientX && event.clientX <= rect.left + rect.width
+          );
+          if (!isDialogContent) finish(null);
+        };
+      }
+    });
+  };
+
+  /**
+   * 將 Google Drive 的共用網址轉換為可以直接顯示的縮圖 (Thumbnail) 網址
+   * 避免直接使用 drive.google.com/open?id= 導致跨域或 iframe 載入失敗 (破圖)
+   * @param {string} url - 原始的 Google Drive 圖片網址
+   * @param {number} [size=100] - 期望的縮圖寬度 (像素)
+   * @returns {string} 轉換後的縮圖網址 (若非 drive 網址則原樣回傳)
+   */
+  window.getDriveImageUrl = function (url, size = 100) {
+    if (!url || typeof url !== 'string') return url;
+    let driveId = null;
+    const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    if (match && match[1]) {
+      driveId = match[1];
+    } else if (url.includes('id=')) {
+      const idMatch = url.match(/id=([a-zA-Z0-9_-]+)/);
+      if (idMatch && idMatch[1]) {
+        driveId = idMatch[1];
+      }
+    }
+    return driveId ? 'https://drive.google.com/thumbnail?id=' + driveId + '&sz=w' + size : url;
+  };
+
+  /**
+   * 打開全螢幕的圖片預覽燈箱 (Image Modal)
+   * @param {string} url - 要顯示的圖片原始網址
+   */
+  window.openImageModal = function (url) {
+    const modal = document.getElementById('image-modal');
+    const img = document.getElementById('image-modal-img');
+    if (modal && img) {
+      img.src = window.getDriveImageUrl(url, 1000);
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      // trigger reflow
+      void modal.offsetWidth;
+      modal.classList.remove('opacity-0');
+      modal.querySelector('div').classList.remove('scale-95');
+      modal.querySelector('div').classList.add('scale-100');
+    }
+  };
+
+  /**
+   * 關閉全螢幕圖片預覽燈箱
+   */
+  window.closeImageModal = function () {
+    const modal = document.getElementById('image-modal');
+    if (modal) {
+      modal.classList.add('opacity-0');
+      modal.querySelector('div').classList.remove('scale-100');
+      modal.querySelector('div').classList.add('scale-95');
+      setTimeout(() => {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      }, 200);
+    }
+  };
+</script>

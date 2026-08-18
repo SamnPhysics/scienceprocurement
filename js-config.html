@@ -1,239 +1,300 @@
 <script>
   // ==========================================
-  // js-config.html — 系統常數與設定檔
-  // 職責：管理狀態選項、表格欄位設定、Excel匯出設定、共用 UI 輔助函數
+  // Module: js-config.html
+  // Responsibility: 管理系統常數與設定檔，包含各系統的狀態選項 (STATUS_OPTIONS)、表格欄位設定 (TABLE_COLUMNS_CONFIG)、Excel匯出設定 (SYSTEM_EXPORT_CONFIGS)，以及 UI/Data 的共用輔助模組 (UIBuilder, DataUtils)。
+  // Dependencies: js-core.html (提供 AppState)
+  // Exports: AppConfig, UIBuilder, DataUtils, TABLE_COLUMNS_CONFIG
   // ==========================================
 
-  const STATUS_OPTIONS = {
-    equipBorrow: [
-      { label: '未歸還', value: '未歸還' },
-      { label: '已歸還', value: '已歸還' }
-    ],
-    equip: [
-      { label: '未購入', value: '未購入' },
-      { label: '已購入', value: '已購入' },
-      { label: '已替換', value: '已替換' },
-      { label: '不通過', value: '不通過' }
-    ],
-    chem: [
-      { label: '未請購', value: '未請購' },
-      { label: '已請購', value: '已請購' },
-      { label: '不通過', value: '不通過' }
-    ]
+  /**
+   * @global
+   * @description 系統基礎設定檔物件 (AppConfig)
+   * 集中管理不同業務模組 (equipBorrow, equip, chem) 的狀態選項清單，與 Excel 匯出欄位對應表。
+   */
+  const AppConfig = {
+    STATUS_OPTIONS: {
+      equipBorrow: [
+        { label: '未歸還', value: '未歸還' },
+        { label: '已歸還', value: '已歸還' }
+      ],
+      equip: [
+        { label: '未購入', value: '未購入' },
+        { label: '已購入', value: '已購入' },
+        { label: '已替換', value: '已替換' },
+        { label: '不通過', value: '不通過' }
+      ],
+      chem: [
+        { label: '未請購', value: '未請購' },
+        { label: '已請購', value: '已請購' },
+        { label: '不通過', value: '不通過' }
+      ]
+    },
+    SYSTEM_EXPORT_CONFIGS: {
+      chem: {
+        sheetName: '藥品物品審核清單',
+        fileName: '藥品物品審核匯出',
+        columns: [
+          { label: '時間戳記', value: item => item.timestamp || '' },
+          { label: '物品/藥品中文名稱', value: item => item.chineseName || '' },
+          { label: '藥品英文名稱(含化學式，分子量)或物品名稱', value: item => item.englishName || '' },
+          { label: '所需數量', value: item => item.quantity || '' },
+          { label: '物品分類/化學藥品狀態', value: item => item.category || '' },
+          { label: '藥品濃度(液態)', value: item => item.concentration || '無' },
+          { label: '課程使用時間', value: item => item.usageTime || '' },
+          { label: '請勾選所需科別', value: item => item.subject || '' },
+          { label: '申請人', value: item => item.applicant || '' },
+          { label: '電子郵件地址', value: item => item.email || '' },
+          { label: '藥品容量(液態)', value: item => item.volume || '無' },
+          { label: '是否請購', value: item => item.status || '未請購' },
+          { label: '備註', value: item => item.remark || '' },
+          { label: '採購總價', value: item => item.totalPrice || '' }
+        ]
+      },
+      equipBorrow: {
+        sheetName: '教學實驗設備借用審核清單',
+        fileName: '教學實驗設備借用審核匯出',
+        columns: [
+          { label: '日期時間', value: item => item.timestamp || '' },
+          { label: '科室', value: item => item.subject || '' },
+          { label: '物品', value: item => item.chineseName || '' },
+          { label: '數量', value: item => item.quantity || '' },
+          { label: '借用人', value: item => item.applicant || '' },
+          { label: '借用說明', value: item => item.purpose || '' },
+          { label: '是否歸還', value: item => item.status || '未歸還' },
+          { label: '備註', value: item => item.remark || '' },
+          { label: '電子郵件', value: item => item.email || '' }
+        ]
+      },
+      equip: {
+        sheetName: '教學及實驗設備審核清單',
+        fileName: '教學及實驗設備審核匯出',
+        columns: [
+          { label: '時間戳記', value: item => item.timestamp || '' },
+          { label: '電子郵件地址', value: item => item.email || '' },
+          { label: '申請人', value: item => item.applicant || '' },
+          { label: '申請科別', value: item => item.subject || '' },
+          { label: '設備名稱/軟體名稱', value: item => item.chineseName || '' },
+          { label: '數量', value: item => item.quantity || '' },
+          { label: '自估單價', value: item => item.price || '' },
+          { label: '需求及用途說明', value: item => item.purpose || '' },
+          { label: '是否為課綱表定設備', value: item => item.isSyllabus || '' },
+          { label: '設備或軟體存置地點', value: item => item.location || '' },
+          { label: '對應科別', value: item => item.correspondSubject || '' },
+          { label: '是否購入', value: item => item.status || '未購入' },
+          { label: '備註', value: item => item.remark || '' },
+          { label: '採購總價', value: item => item.totalPrice || '' }
+        ]
+      }
+    }
   };
 
-  // ----- 表格欄位小元件 (TD Builders) -----
-  function buildTd(content, classNames = "p-3") {
-    return `<td class="${classNames}">${content}</td>`;
-  }
-  function buildCheckboxTd(rowNumber) {
-    return buildTd(`<input type="checkbox" class="user-row-checkbox rounded border-slate-300 text-blue-600 focus:ring-blue-500" value="${rowNumber}">`, "p-3 text-center");
-  }
-  function buildPhotoTd(photoUrl) {
-    if (photoUrl && photoUrl !== '無照片') {
-      return buildTd(`<img src="${getDriveImageUrl(photoUrl, 100)}" alt="圖片" class="w-10 h-10 object-cover mx-auto rounded cursor-pointer border border-slate-200 hover:opacity-80 transition" referrerpolicy="no-referrer" onclick="openImageModal('${photoUrl}')">`, "p-3 text-center");
-    }
-    return buildTd('<span class="text-slate-400 text-xs">無</span>', "p-3 text-center");
-  }
-  function buildStatusSelectTd(system, currentStatus, rowNumber) {
-    const options = STATUS_OPTIONS[system] || STATUS_OPTIONS.chem;
-    const optionsHtml = options.map(opt =>
-      `<option value="${opt.value}" ${currentStatus === opt.value ? 'selected' : ''}>${opt.label}</option>`
-    ).join('');
-    return buildTd(`<div class="flex items-center justify-center"><select id="status-select-${rowNumber}" class="rounded border p-1 text-xs bg-white focus:outline-none">${optionsHtml}</select></div>`, "p-3 text-center");
-  }
-  function buildPriceInputTd(rowNumber, value, placeholder) {
-    return buildTd(`<input type="text" id="price-input-${rowNumber}" value="${value || ''}" placeholder="${placeholder}" class="w-20 border rounded px-1.5 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-blue-500">`, "p-3 text-center");
-  }
-  function buildActionBtnTd(rowNumber) {
-    return buildTd(`<button onclick="handleUpdateClick(${rowNumber}, this)" class="px-2.5 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 transition shadow-sm font-medium">更新</button>`, "p-3 text-center");
-  }
+  /**
+   * @global
+   * @description UI 元件產生器 (UIBuilder)
+   * 提供生成表格儲存格 <td> 與特定互動元件 (如狀態下拉選單、金額輸入框、狀態標籤) 的封裝方法。
+   */
+  const UIBuilder = {
+    /**
+     * 建立基本的 <td> 元素
+     * @param {string} content - 儲存格內的 HTML 內容
+     * @param {string} classNames - CSS 類別，預設為 "p-3"
+     * @returns {string} 渲染後的 <td> HTML 字串
+     */
+    buildTd: function(content, classNames = "p-3") {
+      return `<td class="${classNames}">${content}</td>`;
+    },
 
-  // 狀態色彩標籤
-  function getStatusBadge(status) {
-    if (status === '已請購' || status === '已購入' || status === '已歸還') {
-      return `<span class="px-2 py-0.5 rounded text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">${status}</span>`;
-    } else if (status === '不通過') {
-      return `<span class="px-2 py-0.5 rounded text-xs font-semibold bg-rose-100 text-rose-800 border border-rose-200">${status}</span>`;
-    } else {
-      return `<span class="px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200">${status || '未請購'}</span>`;
-    }
-  }
+    /**
+     * 建立含有核取方塊的 <td> 元素 (用於批次選取)
+     * @param {number|string} rowNumber - 該資料列的唯一識別碼
+     * @returns {string} 渲染後的 <td> HTML 字串
+     */
+    buildCheckboxTd: function(rowNumber) {
+      return this.buildTd(`<input type="checkbox" class="user-row-checkbox rounded border-slate-300 text-blue-600 focus:ring-blue-500" value="${rowNumber}">`, "p-3 text-center");
+    },
 
-  // 日期格式化補助：僅保留 YYYY-MM-DD
-  function formatDateOnly(str) {
-    if (!str) return '';
-    if (typeof str !== 'string') str = String(str);
-    var trimmed = str.trim();
-    if (trimmed.includes(' ')) return trimmed.split(' ')[0];
-    if (trimmed.includes('T')) return trimmed.split('T')[0];
-    return trimmed;
-  }
-
-  // 共用日期過濾輔助函數
-  function filterByDate(item, year, month) {
-    if (!item.timestamp) return false;
-    const parts = String(item.timestamp).split('-');
-    const matchYear = !year || parts[0] === year;
-    const matchMonth = !month || parts[1] === month;
-    return matchYear && matchMonth;
-  }
-
-  // 動態年份篩選下拉選單載入
-  function populateYearFilters(data, selectId) {
-    const select = document.getElementById(selectId);
-    if (!select) return;
-
-    const currentValue = select.value;
-    select.innerHTML = '<option value="">全部年份</option>';
-
-    const years = new Set();
-    data.forEach(function (item) {
-      if (item.timestamp) {
-        const y = item.timestamp.split('-')[0];
-        if (y && y.length === 4) years.add(y);
+    /**
+     * 建立含有狀態下拉選單的 <td> 元素 (供管理員更新狀態)
+     * @param {string} system - 當前系統代號 ('equipBorrow', 'equip', 'chem')
+     * @param {string} currentStatus - 當前該筆資料的狀態
+     * @param {number|string} rowNumber - 該資料列的唯一識別碼
+     * @returns {string} 渲染後的 <td> HTML 字串
+     */
+    buildStatusSelectTd: function(system, currentStatus, rowNumber) {
+      const options = AppConfig.STATUS_OPTIONS[system] || AppConfig.STATUS_OPTIONS.chem;
+      const optionsHtml = options.map(opt =>
+        `<option value="${opt.value}" ${currentStatus === opt.value ? 'selected' : ''}>${opt.label}</option>`
+      ).join('');
+      return this.buildTd(`<div class="flex items-center justify-center"><select id="status-select-${rowNumber}" class="rounded border p-1 text-xs bg-white focus:outline-none">${optionsHtml}</select></div>`, "p-3 text-center");
+    },
+    /**
+     * 建立含有金額/文字輸入框的 <td> 元素 (供管理員更新備註或單價)
+     * @param {number|string} rowNumber - 該資料列的唯一識別碼
+     * @param {string|number} value - 當前輸入框的值
+     * @param {string} placeholder - 提示文字 (如 '元', '備註')
+     * @returns {string} 渲染後的 <td> HTML 字串
+     */
+    buildPriceInputTd: function(rowNumber, value, placeholder) {
+      return this.buildTd(`<input type="text" id="price-input-${rowNumber}" value="${value || ''}" placeholder="${placeholder}" class="w-20 border rounded px-1.5 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-blue-500">`, "p-3 text-center");
+    },
+    /**
+     * 建立觸發更新動作的按鈕 <td> 元素
+     * (結合 data-action 供外層 Event Delegation 使用)
+     * @param {number|string} rowNumber - 該資料列的唯一識別碼
+     * @returns {string} 渲染後的 <td> HTML 字串
+     */
+    buildActionBtnTd: function(rowNumber) {
+      return this.buildTd(`<button data-action="update" data-row="${rowNumber}" class="btn-update-row px-2.5 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 transition shadow-sm font-medium">更新</button>`, "p-3 text-center");
+    },
+    /**
+     * 根據狀態文字回傳具有對應顏色樣式的 Badge HTML
+     * @param {string} status - 狀態字串 (如 '已請購', '不通過')
+     * @returns {string} 帶有樣式的 HTML span 元素
+     */
+    getStatusBadge: function(status) {
+      if (status === '已請購' || status === '已購入' || status === '已歸還') {
+        return `<span class="px-2 py-0.5 rounded text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">${status}</span>`;
+      } else if (status === '不通過') {
+        return `<span class="px-2 py-0.5 rounded text-xs font-semibold bg-rose-100 text-rose-800 border border-rose-200">${status}</span>`;
+      } else {
+        return `<span class="px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200">${status || '未請購'}</span>`;
       }
-    });
+    }
+  };
 
-    const sortedYears = Array.from(years).sort(function (a, b) { return b - a; });
-    sortedYears.forEach(function (y) {
-      const opt = document.createElement('option');
-      opt.value = y;
-      opt.textContent = y + ' 年';
-      if (y === currentValue) opt.selected = true;
-      select.appendChild(opt);
-    });
-  }
+  /**
+   * @global
+   * @description 資料處理輔助工具 (DataUtils)
+   * 提供日期格式化、日期篩選與選單資料萃取等純邏輯函式。
+   */
+  const DataUtils = {
+    /**
+     * 格式化日期字串，僅保留 YYYY-MM-DD 部分
+     * @param {string|Date} str - 原始日期時間字串或物件
+     * @returns {string} 格式化後的日期字串
+     */
+    formatDateOnly: function(str) {
+      if (!str) return '';
+      if (typeof str !== 'string') str = String(str);
+      var trimmed = str.trim();
+      if (trimmed.includes(' ')) return trimmed.split(' ')[0];
+      if (trimmed.includes('T')) return trimmed.split('T')[0];
+      return trimmed;
+    },
+    /**
+     * 判斷指定資料項目是否符合選擇的年份與月份
+     * @param {Object} item - 包含 timestamp 屬性的資料物件
+     * @param {string} year - 篩選的年份 (為空字串代表不限)
+     * @param {string} month - 篩選的月份 (為空字串代表不限)
+     * @returns {boolean} 是否符合條件
+     */
+    filterByDate: function(item, year, month) {
+      if (!item.timestamp) return false;
+      const parts = String(item.timestamp).split('-');
+      const matchYear = !year || parts[0] === year;
+      const matchMonth = !month || parts[1] === month;
+      return matchYear && matchMonth;
+    },
+    /**
+     * 掃描所有資料的 timestamp 欄位，萃取出所有出現過的年份，並填入下拉選單中
+     * @param {Array<Object>} data - 資料陣列
+     * @param {string} selectId - 目標年份下拉選單的 HTML ID
+     */
+    populateYearFilters: function(data, selectId) {
+      const select = document.getElementById(selectId);
+      if (!select) return;
 
-  // ----- 表格資料驅動設定檔 (Table Config) -----
+      const currentValue = select.value;
+      select.innerHTML = '<option value="">全部年份</option>';
+
+      const years = new Set();
+      data.forEach(function (item) {
+        if (item.timestamp) {
+          const y = item.timestamp.split('-')[0];
+          if (y && y.length === 4) years.add(y);
+        }
+      });
+
+      const sortedYears = Array.from(years).sort(function (a, b) { return b - a; });
+      sortedYears.forEach(function (y) {
+        const opt = document.createElement('option');
+        opt.value = y;
+        opt.textContent = y + ' 年';
+        if (y === currentValue) opt.selected = true;
+        select.appendChild(opt);
+      });
+    }
+  };
+
+  /**
+   * @global
+   * @description 表格資料驅動設定檔 (TABLE_COLUMNS_CONFIG)
+   * 根據不同的業務 (equipBorrow, equip, chem) 與視角 ('user-list' 申請人視角, 'admin' 管理員視角)，
+   * 定義要在 DataTable 中渲染的欄位與對應的渲染邏輯 (利用 UIBuilder)。
+   */
   const TABLE_COLUMNS_CONFIG = {
     equipBorrow: {
       'user-list': [
-        { header: '借用人', thClass: 'p-3', render: (item) => buildTd(`<span class="font-medium text-slate-900">${item.applicant || ''}</span>`) },
-        { header: '借用物品', thClass: 'p-3', render: (item) => buildTd(`<span class="font-medium text-slate-900">${item.chineseName || ''}</span>`) },
-        { header: '圖片', thClass: 'p-3 text-center', render: (item) => buildPhotoTd(item.photoUrl) },
-        { header: '是否歸還', thClass: 'p-3 text-center', render: (item) => buildTd(getStatusBadge(item.status), "p-3 text-center") }
+        { header: '借用人', thClass: 'p-3', render: (item) => UIBuilder.buildTd(`<span class="font-medium text-slate-900">${item.applicant || ''}</span>`) },
+        { header: '借用物品', thClass: 'p-3', render: (item) => UIBuilder.buildTd(`<span class="font-medium text-slate-900">${item.chineseName || ''}</span>`) },
+        { header: '是否歸還', thClass: 'p-3 text-center', render: (item) => UIBuilder.buildTd(UIBuilder.getStatusBadge(item.status), "p-3 text-center") }
       ],
       'admin': [
-        { header: `<input type="checkbox" id="admin-select-all" onclick="toggleSelectAllUsers(this.checked)" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500">`, thClass: 'p-3 w-10 text-center', render: (item) => buildCheckboxTd(item.rowNumber) },
-        { header: '日期', thClass: 'p-3', render: (item) => buildTd(`<span class="text-xs whitespace-nowrap">${formatDateOnly(item.timestamp)}</span>`) },
-        { header: '科室/班級', thClass: 'p-3', render: (item) => buildTd(`<span class="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700 whitespace-nowrap">${item.subject || ''}</span>`) },
-        { header: '借用物品', thClass: 'p-3', render: (item) => buildTd(`<span class="font-medium text-slate-900 min-w-[100px]">${item.chineseName || ''}</span>`) },
-        { header: '數量', thClass: 'p-3 w-16 text-center', render: (item) => buildTd(`<span class="font-semibold text-slate-800 min-w-[80px]">${item.quantity || ''}</span>`, "p-3 text-center") },
-        { header: '借用人', thClass: 'p-3', render: (item) => buildTd(`<span class="text-xs whitespace-nowrap">${item.applicant || ''}</span>`) },
-        { header: '是否歸還', thClass: 'p-3 text-center', render: (item) => buildStatusSelectTd('equipBorrow', item.status, item.rowNumber) },
-        { header: '備註', thClass: 'p-3 text-center w-28', render: (item) => buildPriceInputTd(item.rowNumber, item.remark, '備註') },
-        { header: '操作', thClass: 'p-3 text-center', render: (item) => buildActionBtnTd(item.rowNumber) }
+        { header: `<input type="checkbox" id="admin-select-all" onclick="toggleSelectAllUsers(this.checked)" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500">`, thClass: 'p-3 w-10 text-center', render: (item) => UIBuilder.buildCheckboxTd(item.rowNumber) },
+        { header: '日期', thClass: 'p-3', render: (item) => UIBuilder.buildTd(`<span class="text-xs whitespace-nowrap">${DataUtils.formatDateOnly(item.timestamp)}</span>`) },
+        { header: '科室/班級', thClass: 'p-3', render: (item) => UIBuilder.buildTd(`<span class="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700 whitespace-nowrap">${item.subject || ''}</span>`) },
+        { header: '借用物品', thClass: 'p-3', render: (item) => UIBuilder.buildTd(`<span class="font-medium text-slate-900 min-w-[100px]">${item.chineseName || ''}</span>`) },
+        { header: '數量', thClass: 'p-3 w-16 text-center', render: (item) => UIBuilder.buildTd(`<span class="font-semibold text-slate-800 min-w-[80px]">${item.quantity || ''}</span>`, "p-3 text-center") },
+        { header: '借用人', thClass: 'p-3', render: (item) => UIBuilder.buildTd(`<span class="text-xs whitespace-nowrap">${item.applicant || ''}</span>`) },
+        { header: '是否歸還', thClass: 'p-3 text-center', render: (item) => UIBuilder.buildStatusSelectTd('equipBorrow', item.status, item.rowNumber) },
+        { header: '備註', thClass: 'p-3 text-center w-28', render: (item) => UIBuilder.buildPriceInputTd(item.rowNumber, item.remark, '備註') },
+        { header: '操作', thClass: 'p-3 text-center', render: (item) => UIBuilder.buildActionBtnTd(item.rowNumber) }
       ]
     },
     equip: {
       'user-list': [
-        { header: `<input type="checkbox" id="user-select-all" onclick="toggleSelectAllUsers(this.checked)" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500">`, thClass: 'p-3 w-10 text-center', render: (item) => buildCheckboxTd(item.rowNumber) },
-        { header: '時間戳記', thClass: 'p-3', render: (item) => buildTd(`<span class="text-xs whitespace-nowrap">${formatDateOnly(item.timestamp)}</span>`) },
-        { header: '申請科別', thClass: 'p-3', render: (item) => buildTd(`<span class="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700 whitespace-nowrap">${item.subject || ''}</span>`) },
-        { header: '設備名稱/軟體名稱', thClass: 'p-3', render: (item) => buildTd(`<span class="font-medium text-slate-900">${item.chineseName || ''}</span>`) },
-        { header: '圖片', thClass: 'p-3 text-center', render: (item) => buildPhotoTd(item.photoUrl) },
-        { header: '數量', thClass: 'p-3 w-16 text-center', render: (item) => buildTd(`<span class="font-semibold text-slate-800">${item.quantity || ''}</span>`, "p-3 text-center") },
-        { header: '自估單價', thClass: 'p-3 text-center w-28', render: (item) => buildTd(`<span class="text-rose-600 font-medium">${item.price ? item.price + ' 元' : '無'}</span>`, "p-3 text-center") },
-        { header: '是否購入', thClass: 'p-3 text-center', render: (item) => buildTd(getStatusBadge(item.status), "p-3 text-center") }
+        { header: `<input type="checkbox" id="user-select-all" onclick="toggleSelectAllUsers(this.checked)" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500">`, thClass: 'p-3 w-10 text-center', render: (item) => UIBuilder.buildCheckboxTd(item.rowNumber) },
+        { header: '時間戳記', thClass: 'p-3', render: (item) => UIBuilder.buildTd(`<span class="text-xs whitespace-nowrap">${DataUtils.formatDateOnly(item.timestamp)}</span>`) },
+        { header: '申請科別', thClass: 'p-3', render: (item) => UIBuilder.buildTd(`<span class="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700 whitespace-nowrap">${item.subject || ''}</span>`) },
+        { header: '設備名稱/軟體名稱', thClass: 'p-3', render: (item) => UIBuilder.buildTd(`<span class="font-medium text-slate-900">${item.chineseName || ''}</span>`) },
+        { header: '數量', thClass: 'p-3 w-16 text-center', render: (item) => UIBuilder.buildTd(`<span class="font-semibold text-slate-800">${item.quantity || ''}</span>`, "p-3 text-center") },
+        { header: '自估單價', thClass: 'p-3 text-center w-28', render: (item) => UIBuilder.buildTd(`<span class="text-rose-600 font-medium">${item.price ? item.price + ' 元' : '無'}</span>`, "p-3 text-center") },
+        { header: '是否購入', thClass: 'p-3 text-center', render: (item) => UIBuilder.buildTd(UIBuilder.getStatusBadge(item.status), "p-3 text-center") }
       ],
       'admin': [
-        { header: `<input type="checkbox" id="admin-select-all" onclick="toggleSelectAllUsers(this.checked)" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500">`, thClass: 'p-3 w-10 text-center', render: (item) => buildCheckboxTd(item.rowNumber) },
-        { header: '時間戳記', thClass: 'p-3', render: (item) => buildTd(`<span class="text-xs whitespace-nowrap">${formatDateOnly(item.timestamp)}</span>`) },
-        { header: '申請科別', thClass: 'p-3', render: (item) => buildTd(`<span class="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700 whitespace-nowrap">${item.subject || ''}</span>`) },
-        { header: '設備名稱/軟體名稱', thClass: 'p-3', render: (item) => buildTd(`<span class="font-medium text-slate-900 min-w-[100px]">${item.chineseName || ''}</span>`) },
-        { header: '數量', thClass: 'p-3 w-16 text-center', render: (item) => buildTd(`<span class="font-semibold text-slate-800 min-w-[80px]">${item.quantity || ''}</span>`, "p-3 text-center") },
-        { header: '申請人', thClass: 'p-3', render: (item) => buildTd(`<span class="text-xs whitespace-nowrap">${item.applicant || ''}</span>`) },
-        { header: '是否購入', thClass: 'p-3 text-center', render: (item) => buildStatusSelectTd('equip', item.status, item.rowNumber) },
-        { header: '自估單價', thClass: 'p-3 text-center w-28', render: (item) => buildPriceInputTd(item.rowNumber, item.price, '元') },
-        { header: '操作', thClass: 'p-3 text-center', render: (item) => buildActionBtnTd(item.rowNumber) }
+        { header: `<input type="checkbox" id="admin-select-all" onclick="toggleSelectAllUsers(this.checked)" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500">`, thClass: 'p-3 w-10 text-center', render: (item) => UIBuilder.buildCheckboxTd(item.rowNumber) },
+        { header: '時間戳記', thClass: 'p-3', render: (item) => UIBuilder.buildTd(`<span class="text-xs whitespace-nowrap">${DataUtils.formatDateOnly(item.timestamp)}</span>`) },
+        { header: '申請科別', thClass: 'p-3', render: (item) => UIBuilder.buildTd(`<span class="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700 whitespace-nowrap">${item.subject || ''}</span>`) },
+        { header: '設備名稱/軟體名稱', thClass: 'p-3', render: (item) => UIBuilder.buildTd(`<span class="font-medium text-slate-900 min-w-[100px]">${item.chineseName || ''}</span>`) },
+        { header: '數量', thClass: 'p-3 w-16 text-center', render: (item) => UIBuilder.buildTd(`<span class="font-semibold text-slate-800 min-w-[80px]">${item.quantity || ''}</span>`, "p-3 text-center") },
+        { header: '申請人', thClass: 'p-3', render: (item) => UIBuilder.buildTd(`<span class="text-xs whitespace-nowrap">${item.applicant || ''}</span>`) },
+        { header: '是否購入', thClass: 'p-3 text-center', render: (item) => UIBuilder.buildStatusSelectTd('equip', item.status, item.rowNumber) },
+        { header: '自估單價', thClass: 'p-3 text-center w-28', render: (item) => UIBuilder.buildPriceInputTd(item.rowNumber, item.price, '元') },
+        { header: '操作', thClass: 'p-3 text-center', render: (item) => UIBuilder.buildActionBtnTd(item.rowNumber) }
       ]
     },
     chem: {
       'user-list': [
-        { header: `<input type="checkbox" id="user-select-all" onclick="toggleSelectAllUsers(this.checked)" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500">`, thClass: 'p-3 w-10 text-center', render: (item) => buildCheckboxTd(item.rowNumber) },
-        { header: '時間戳記', thClass: 'p-3', render: (item) => buildTd(`<span class="text-xs whitespace-nowrap">${formatDateOnly(item.timestamp)}</span>`) },
-        { header: '科別', thClass: 'p-3', render: (item) => buildTd(`<span class="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700 whitespace-nowrap">${item.subject || ''}</span>`) },
-        { header: '名稱', thClass: 'p-3', render: (item) => buildTd(`<span class="font-medium text-slate-900">${item.chineseName || ''}</span>`) },
-        { header: '圖片', thClass: 'p-3 text-center', render: (item) => buildPhotoTd(item.photoUrl) },
-        { header: '所需數量', thClass: 'p-3 w-16 text-center', render: (item) => buildTd(`<span class="font-semibold text-slate-800">${item.quantity || ''}</span>`, "p-3 text-center") },
-        { header: '分類/狀態', thClass: 'p-3 text-center', render: (item) => buildTd(`<span class="text-xs whitespace-nowrap">${item.category || ''}</span>`, "p-3 text-center") },
-        { header: '是否請購', thClass: 'p-3 text-center', render: (item) => buildTd(getStatusBadge(item.status), "p-3 text-center") },
-        { header: '採購總價', thClass: 'p-3 text-center w-28', render: (item) => buildTd(`<span class="text-rose-600 font-medium">${item.totalPrice ? item.totalPrice + ' 元' : '無'}</span>`, "p-3 text-center") }
+        { header: `<input type="checkbox" id="user-select-all" onclick="toggleSelectAllUsers(this.checked)" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500">`, thClass: 'p-3 w-10 text-center', render: (item) => UIBuilder.buildCheckboxTd(item.rowNumber) },
+        { header: '時間戳記', thClass: 'p-3', render: (item) => UIBuilder.buildTd(`<span class="text-xs whitespace-nowrap">${DataUtils.formatDateOnly(item.timestamp)}</span>`) },
+        { header: '科別', thClass: 'p-3', render: (item) => UIBuilder.buildTd(`<span class="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700 whitespace-nowrap">${item.subject || ''}</span>`) },
+        { header: '名稱', thClass: 'p-3', render: (item) => UIBuilder.buildTd(`<span class="font-medium text-slate-900">${item.chineseName || ''}</span>`) },
+        { header: '所需數量', thClass: 'p-3 w-16 text-center', render: (item) => UIBuilder.buildTd(`<span class="font-semibold text-slate-800">${item.quantity || ''}</span>`, "p-3 text-center") },
+        { header: '分類/狀態', thClass: 'p-3 text-center', render: (item) => UIBuilder.buildTd(`<span class="text-xs whitespace-nowrap">${item.category || ''}</span>`, "p-3 text-center") },
+        { header: '是否請購', thClass: 'p-3 text-center', render: (item) => UIBuilder.buildTd(UIBuilder.getStatusBadge(item.status), "p-3 text-center") },
+        { header: '採購總價', thClass: 'p-3 text-center w-28', render: (item) => UIBuilder.buildTd(`<span class="text-rose-600 font-medium">${item.totalPrice ? item.totalPrice + ' 元' : '無'}</span>`, "p-3 text-center") }
       ],
       'admin': [
-        { header: `<input type="checkbox" id="admin-select-all" onclick="toggleSelectAllUsers(this.checked)" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500">`, thClass: 'p-3 w-10 text-center', render: (item) => buildCheckboxTd(item.rowNumber) },
-        { header: '時間戳記', thClass: 'p-3', render: (item) => buildTd(`<span class="text-xs whitespace-nowrap">${formatDateOnly(item.timestamp)}</span>`) },
-        { header: '科別', thClass: 'p-3', render: (item) => buildTd(`<span class="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700 whitespace-nowrap">${item.subject || ''}</span>`) },
-        { header: '名稱', thClass: 'p-3', render: (item) => buildTd(`<span class="font-medium text-slate-900 min-w-[100px]">${item.chineseName || ''}</span>`) },
-        { header: '圖片', thClass: 'p-3 text-center', render: (item) => buildPhotoTd(item.photoUrl) },
-        { header: '所需數量', thClass: 'p-3 w-16 text-center', render: (item) => buildTd(`<span class="font-semibold text-slate-800 min-w-[80px]">${item.quantity || ''}</span>`, "p-3 text-center") },
-        { header: '分類/狀態', thClass: 'p-3 text-center', render: (item) => buildTd(`<span class="text-xs min-w-[100px]">${item.category || ''}</span>`, "p-3 text-center") },
-        { header: '申請人', thClass: 'p-3', render: (item) => buildTd(`<span class="text-xs whitespace-nowrap">${item.applicant || ''}</span>`) },
-        { header: '是否請購', thClass: 'p-3 text-center', render: (item) => buildStatusSelectTd('chem', item.status, item.rowNumber) },
-        { header: '採購總價', thClass: 'p-3 text-center w-28', render: (item) => buildPriceInputTd(item.rowNumber, item.totalPrice, '元') },
-        { header: '操作', thClass: 'p-3 text-center', render: (item) => buildActionBtnTd(item.rowNumber) }
-      ]
-    }
-  };
-
-  // ----- 匯出 Excel 設定檔 -----
-  const SYSTEM_EXPORT_CONFIGS = {
-    chem: {
-      sheetName: '藥品物品審核清單',
-      fileName: '藥品物品審核匯出',
-      columns: [
-        { label: '時間戳記', value: item => item.timestamp || '' },
-        { label: '物品/藥品中文名稱', value: item => item.chineseName || '' },
-        { label: '藥品英文名稱(含化學式，分子量)或物品名稱', value: item => item.englishName || '' },
-        { label: '所需數量', value: item => item.quantity || '' },
-        { label: '物品分類/化學藥品狀態', value: item => item.category || '' },
-        { label: '藥品濃度(液態)', value: item => item.concentration || '無' },
-        { label: '課程使用時間', value: item => item.usageTime || '' },
-        { label: '請勾選所需科別', value: item => item.subject || '' },
-        { label: '申請人', value: item => item.applicant || '' },
-        { label: '電子郵件地址', value: item => item.email || '' },
-        { label: '物品/藥品照片', value: item => item.photoUrl || '無照片' },
-        { label: '藥品容量(液態)', value: item => item.volume || '無' },
-        { label: '是否請購', value: item => item.status || '未請購' },
-        { label: '備註', value: item => item.remark || '' },
-        { label: '採購總價', value: item => item.totalPrice || '' }
-      ]
-    },
-    equipBorrow: {
-      sheetName: '教學實驗設備借用審核清單',
-      fileName: '教學實驗設備借用審核匯出',
-      columns: [
-        { label: '日期時間', value: item => item.timestamp || '' },
-        { label: '科室', value: item => item.subject || '' },
-        { label: '物品', value: item => item.chineseName || '' },
-        { label: '數量', value: item => item.quantity || '' },
-        { label: '借用人', value: item => item.applicant || '' },
-        { label: '借用說明', value: item => item.purpose || '' },
-        { label: '是否歸還', value: item => item.status || '未歸還' },
-        { label: '備註', value: item => item.remark || '' },
-        { label: '電子郵件', value: item => item.email || '' },
-        { label: '照片', value: item => item.photoUrl || '無照片' }
-      ]
-    },
-    equip: {
-      sheetName: '教學及實驗設備審核清單',
-      fileName: '教學及實驗設備審核匯出',
-      columns: [
-        { label: '時間戳記', value: item => item.timestamp || '' },
-        { label: '電子郵件地址', value: item => item.email || '' },
-        { label: '申請人', value: item => item.applicant || '' },
-        { label: '申請科別', value: item => item.subject || '' },
-        { label: '設備名稱/軟體名稱', value: item => item.chineseName || '' },
-        { label: '數量', value: item => item.quantity || '' },
-        { label: '自估單價', value: item => item.price || '' },
-        { label: '需求及用途說明', value: item => item.purpose || '' },
-        { label: '是否為課綱表定設備', value: item => item.isSyllabus || '' },
-        { label: '設備或軟體存置地點', value: item => item.location || '' },
-        { label: '對應科別', value: item => item.correspondSubject || '' },
-        { label: '是否購入', value: item => item.status || '未購入' },
-        { label: '備註', value: item => item.remark || '' },
-        { label: '採購總價', value: item => item.totalPrice || '' }
+        { header: `<input type="checkbox" id="admin-select-all" onclick="toggleSelectAllUsers(this.checked)" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500">`, thClass: 'p-3 w-10 text-center', render: (item) => UIBuilder.buildCheckboxTd(item.rowNumber) },
+        { header: '時間戳記', thClass: 'p-3', render: (item) => UIBuilder.buildTd(`<span class="text-xs whitespace-nowrap">${DataUtils.formatDateOnly(item.timestamp)}</span>`) },
+        { header: '科別', thClass: 'p-3', render: (item) => UIBuilder.buildTd(`<span class="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700 whitespace-nowrap">${item.subject || ''}</span>`) },
+        { header: '名稱', thClass: 'p-3', render: (item) => UIBuilder.buildTd(`<span class="font-medium text-slate-900 min-w-[100px]">${item.chineseName || ''}</span>`) },
+        { header: '所需數量', thClass: 'p-3 w-16 text-center', render: (item) => UIBuilder.buildTd(`<span class="font-semibold text-slate-800 min-w-[80px]">${item.quantity || ''}</span>`, "p-3 text-center") },
+        { header: '分類/狀態', thClass: 'p-3 text-center', render: (item) => UIBuilder.buildTd(`<span class="text-xs min-w-[100px]">${item.category || ''}</span>`, "p-3 text-center") },
+        { header: '申請人', thClass: 'p-3', render: (item) => UIBuilder.buildTd(`<span class="text-xs whitespace-nowrap">${item.applicant || ''}</span>`) },
+        { header: '是否請購', thClass: 'p-3 text-center', render: (item) => UIBuilder.buildStatusSelectTd('chem', item.status, item.rowNumber) },
+        { header: '採購總價', thClass: 'p-3 text-center w-28', render: (item) => UIBuilder.buildPriceInputTd(item.rowNumber, item.totalPrice, '元') },
+        { header: '操作', thClass: 'p-3 text-center', render: (item) => UIBuilder.buildActionBtnTd(item.rowNumber) }
       ]
     }
   };

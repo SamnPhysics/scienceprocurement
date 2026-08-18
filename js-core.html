@@ -1,8 +1,9 @@
 <script>
   // ==========================================
-  // js-core.html — 核心工具與全域初始化
-  // 職責：Session Token、debounce、DOM 快取、全域狀態宣告
-  // 載入順序：最優先，其他所有模組依賴此模組
+  // Module: js-core.html
+  // Responsibility: 核心工具與全域初始化，包含 Session Token 管理、debounce 工具、DOM 快取、全域狀態 (AppState) 宣告。
+  // Dependencies: (無，此為最基礎模組)
+  // Exports: AppState, DOM, ApiService, SystemCache, callGas, renderTemplate, getToken, debounce, initDOM
   // ==========================================
 
   var templateSessionToken = '<?= sessionToken ?>';
@@ -17,7 +18,13 @@
     }
   }
 
-  // 共用防抖函數 (Debounce)
+  /**
+   * 共用防抖函數 (Debounce)
+   * 用於限制高頻率觸發的事件（如 resize, scroll, input）的執行次數
+   * @param {Function} func - 要延遲執行的函式
+   * @param {number} wait - 延遲的時間（毫秒）
+   * @returns {Function} 包裝過後的防抖函式
+   */
   function debounce(func, wait) {
     let timeout;
     return function (...args) {
@@ -26,12 +33,22 @@
     };
   }
 
-  // 取得 auth token 的統一包裝（集中管理 localStorage key）
+  /**
+   * 取得使用者的登入 Token (JWT 或 Session Token)
+   * 統一包裝以集中管理 localStorage key
+   * @returns {string|null} 儲存在 localStorage 的 Token 字串
+   */
   function getToken() {
     return localStorage.getItem('my_app_token');
   }
 
-  // 通用 HTML 樣板渲染器：配合獨立 HTML 檔案中的 HTML5 <template> 進行佔位符取代
+  /**
+   * 通用 HTML 樣板渲染器
+   * 配合獨立 HTML 檔案中的 <template> 標籤進行 {{placeholder}} 取代
+   * @param {string} templateId - 要渲染的 <template> 元素的 ID
+   * @param {Object} data - 包含要替換的鍵值對的資料物件
+   * @returns {string} 渲染完成的 HTML 字串
+   */
   function renderTemplate(templateId, data = {}) {
     const tpl = document.getElementById(templateId);
     if (!tpl) {
@@ -43,9 +60,16 @@
     });
   }
 
-  // DOM 元素快取
+  /**
+   * @global
+   * @description DOM 元素快取物件，用於集中管理與存取常用的 DOM 節點，避免重複呼叫 document.getElementById
+   */
   const DOM = {};
 
+  /**
+   * 初始化 DOM 快取
+   * 將預先定義的 ID 列表轉換為駝峰式命名 (camelCase) 後存入 DOM 物件
+   */
   function initDOM() {
     const ids = [
       'photoFile', 'paste-zone', 'preview-container', 'upload-prompt', 'image-preview',
@@ -66,23 +90,31 @@
     });
   }
 
-  // 全域權限狀態 - 使用 var 宣告使其順利掛載於 window 物件供各子模組共用與取用
-  var currentUserEmail = '';
-  var currentUserDisplayName = '';
-  window.currentUserEmail = '';
-  window.currentUserDisplayName = '';
-
-  // 全域頁面狀態
-  let currentSystemTab = 'equipBorrow';
-  let currentActionView = 'apply';
-
-  // 功能旗標：第二階段先預設關閉 tooltip，可快速回滾
-  window.APP_FEATURES = Object.assign({ tooltip: false }, window.APP_FEATURES || {});
+  /**
+   * @global
+   * @description 全域系統共用狀態 (AppState) 封裝
+   * 包含當前使用者資訊、目前啟用的頁籤、權限狀態與系統功能開關
+   */
+  var AppState = {
+    currentUserEmail: '',
+    currentUserDisplayName: '',
+    currentSystemTab: 'equipBorrow',
+    currentActionView: 'apply',
+    // 欲啟用表格列的 Tooltip 懸停預覽功能，可將 tooltip 設為 true
+    features: Object.assign({ tooltip: false }, window.APP_FEATURES || {})
+  };
+  window.AppState = AppState;
 
   // 初始化 DOM 快取並設置初始未登入狀態
   initDOM();
 
-  // GAS API Promise 包裝器
+  /**
+   * GAS API Promise 包裝器 (Google Apps Script)
+   * 將基於 callback 的 google.script.run 轉換為可使用 async/await 的 Promise 形式
+   * @param {string} functionName - 位於 Code.js 中的 GAS 後端函式名稱
+   * @param {...any} args - 傳遞給該函式的參數
+   * @returns {Promise<any>} 解析後端回傳的資料，或拋出錯誤
+   */
   window.callGas = function(functionName, ...args) {
     return new Promise((resolve, reject) => {
       google.script.run
@@ -92,14 +124,58 @@
     });
   };
 
-  // 全域快取與靜默更新管理器 (Stale-While-Revalidate)
+  /**
+   * @global
+   * @description 統一 API 服務層 (API Service Layer)
+   * 集中管理所有與 GAS 後端的互動，依照領域 (auth, form, admin, lab, settings) 進行分類
+   */
+  var ApiService = {
+    auth: {
+      getStatus: (token) => window.callGas('getAuthStatus', token),
+      logout: (token) => window.callGas('logoutOAuth', token),
+      getLoginUrl: () => window.callGas('getLoginUrl')
+    },
+    form: {
+      submitChem: (data, token) => window.callGas('submitApplication', data, token),
+      submitEquip: (data, token) => window.callGas('submitEquipApplication', data, token),
+      submitEquipBorrow: (data, token) => window.callGas('submitEquipBorrowApplication', data, token),
+      batchSubmitChem: (data, token) => window.callGas('batchSubmitApplication', data, token)
+    },
+    admin: {
+      updateStatus: (row, status, price, token, sys) => window.callGas('updateProcurementStatus', row, status, price, token, sys),
+      batchUpdateStatus: (updates, token, sys) => window.callGas('batchUpdateProcurementStatus', updates, token, sys),
+      deleteRequests: (rows, token, sys) => window.callGas('deleteUserRequests', rows, token, sys)
+    },
+    lab: {
+      submitBooking: (data, token) => window.callGas('submitLabBooking', data, token),
+      cancelBooking: (row, token, series) => window.callGas('cancelLabBooking', row, token, series)
+    },
+    settings: {
+      getSettings: (token) => window.callGas('getSystemSettings', token),
+      updateConfig: (config, token) => window.callGas('saveSystemSettings', config, token),
+      uploadLogo: (base64, mimeType, filename, token) => window.callGas('uploadLogoImage', base64, mimeType, filename, token)
+    }
+  };
+  window.ApiService = ApiService;
+
+  /**
+   * @global
+   * @description 全域快取與靜默更新管理器 (Stale-While-Revalidate)
+   * 用於管理資料的本地快取，防止頻繁發送 API 請求，並提供背景無感更新 (靜默更新) 的能力
+   */
   window.SystemCache = {
     data: {},
     lastFetch: {},
     fetchStatus: {},
     callbacks: {},
 
-    // fetchData: 實作背景預載與 30秒防護靜默更新
+    /**
+     * 獲取資料：實作背景預載與 30秒防護靜默更新
+     * @param {string} key - 快取鍵值 (例：'admin_chem')
+     * @param {Function} apiCallerPromiseFactory - 回傳 Promise 的 API 呼叫函式
+     * @param {Function} callback - 資料回傳時執行的回呼函式，參數為 (data, error)
+     * @param {boolean} [force=false] - 是否強制忽略 30 秒防護，立即重新請求
+     */
     fetchData: function(key, apiCallerPromiseFactory, callback, force = false) {
       const now = Date.now();
       
@@ -152,9 +228,14 @@
         });
     },
     
-    // 使快取過期 (例如表單送出後，強制下次更新)
+    /**
+     * 使特定快取過期 (強制失效)
+     * 當表單送出或狀態更新後，呼叫此函式可確保下次切換頁籤時重新載入最新資料
+     * @param {string} key - 快取鍵值
+     */
     invalidate: function(key) {
       this.lastFetch[key] = 0;
+      delete this.data[key]; // 強制清除記憶體舊資料，以利畫面顯示「載入中」
     }
   };
 </script>

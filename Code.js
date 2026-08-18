@@ -40,7 +40,6 @@ const UI_CONFIG = {
 // --- 管理員信箱名單與特例白名單 ---
 const ADMIN_EMAILS_STR = ENV_PROPS['ADMIN_EMAILS'] || '';
 const ADMIN_EMAILS = ADMIN_EMAILS_STR.split(',').map(function (e) { return e.trim().toLowerCase(); }).filter(function (e) { return e !== ''; });
-const SPECIAL_ADMIN_ACCOUNTS = ['5501@fhsh.khc.edu.tw', '5502@fhsh.khc.edu.tw']; // 系統預設管理員信箱例外
 
 // --- 阻擋名單規則 (支援正規表達式 RegExp 或 Email 字串) ---
 const BLOCKED_ACCOUNT_RULES = [
@@ -50,7 +49,7 @@ const BLOCKED_ACCOUNT_RULES = [
 function isAdminUser(email) {
   if (!email) return false;
   var norm = email.toLowerCase().trim();
-  return ADMIN_EMAILS.indexOf(norm) !== -1 || SPECIAL_ADMIN_ACCOUNTS.indexOf(norm) !== -1;
+  return ADMIN_EMAILS.indexOf(norm) !== -1;
 }
 
 // 判斷是否為被阻擋的帳號
@@ -987,9 +986,6 @@ function setupProperties() {
 
     // 【選填】前端介面左上角的 Logo 圖片 (Google Drive 檔案 ID)
     'LOGO_ID': '請設定 LOGO_ID',
-
-    // 【必填】設備申請表的 Google 試算表 ID
-    'EQUIP_SHEET_ID': '1wHoExMIEB2oEFY_YTg39jMjB_kT1AOTAltFtkRu8f0c',
 
     // 注意：CLIENT_ID 與 CLIENT_SECRET 用來連接GCP相關資料
     'CLIENT_ID': '',
