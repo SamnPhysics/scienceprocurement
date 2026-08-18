@@ -272,8 +272,8 @@ function batchSubmitApplication(formDataArray, token) {
       return { success: false, message: '提交失敗：您必須登入學校網域帳號 (@' + ALLOWED_DOMAIN + ') 才能進行申請！' };
     }
 
-    if (isBlockedUser(email)) {
-      return { success: false, message: '提交失敗：您的帳號禁止使用此系統！' };
+    if (isStudentAccount(email)) {
+      return { success: false, message: '提交失敗：學生帳號無權限使用此功能！' };
     }
 
     var applicant = (profile.name || email.split('@')[0] || '').toString();
@@ -337,8 +337,8 @@ function submitApplication(formData, token) {
     }
 
     // 阻擋帳號防護 (後端二次檢查)
-    if (isBlockedUser(email)) {
-      return { success: false, message: '提交失敗：您的帳號禁止使用此系統！' };
+    if (isStudentAccount(email)) {
+      return { success: false, message: '提交失敗：學生帳號無權限使用此功能！' };
     }
 
     // 安全考量：一律以後端獲取的登入 email 作為寫入值
@@ -441,7 +441,7 @@ function submitEquipBorrowApplication(formData, token) {
       return { success: false, message: '提交失敗：您必須登入學校網域帳號 (@' + ALLOWED_DOMAIN + ') 才能進行申請！' };
     }
 
-    // 設備借用開放學生帳號申請，不進行 isBlockedUser 阻擋
+    // 設備借用開放學生帳號申請，不進行 isStudentAccount 阻擋
 
     var applicant = (profile.name || formData.applicant || email.split('@')[0] || '').toString();
 
@@ -530,8 +530,8 @@ function submitEquipApplication(formData, token) {
       return { success: false, message: '提交失敗：您必須登入學校網域帳號 (@' + ALLOWED_DOMAIN + ') 才能進行申請！' };
     }
 
-    if (isBlockedUser(email)) {
-      return { success: false, message: '提交失敗：您的帳號禁止使用此系統！' };
+    if (isStudentAccount(email)) {
+      return { success: false, message: '提交失敗：學生帳號無權限使用此功能！' };
     }
 
     var applicant = (profile.name || email.split('@')[0] || '').toString();
