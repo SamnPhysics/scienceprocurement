@@ -1,6 +1,10 @@
 # 🏫 設備組 教學資源服務平台管理系統
 (Equipment Section - Teaching Resources & Procurement Service Platform)
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Version](https://img.shields.io/github/v/release/SamnPhysics/sci-equip-hub?label=version)](https://github.com/SamnPhysics/sci-equip-hub/releases)
+<!-- 尚未配置自動化測試，如後續新增可在此加入 CI Badge -->
+
 > 基於 **Google Apps Script (GAS)** 與 **Tailwind CSS** 開發的現代化全方位學校教學資源與採購管理平台。由設備組統籌維運，整合**「教學設備借用」**、**「自然科實驗室預約」**、**「教學設備需求申請」**與**「藥品物品請購」**四大核心子系統，具備完善的 OAuth2 權限分級、高併發鎖定機制、背景預載快取與圖形化系統參數管理。
 
 ---
@@ -200,7 +204,39 @@ scienceprocurement/
 
 ---
 
+## ⚠️ 已知限制與技術債 (Known Issues & Limitations)
+
+在導入或部署本系統前，請評估以下基於 Google Apps Script (GAS) 環境所帶來的已知限制：
+1. **身分驗證限制 (OAuth Workaround)**：
+   - 因 GAS「以開發者身分執行」模式下，`Session.getActiveUser()` 無法取得終端使用者的 Email。本系統採用自建 GCP OAuth 2.0 授權，並需透過瀏覽器 Popup 彈窗完成登入。若使用者瀏覽器阻擋彈窗，可能導致登入失敗。
+2. **無自動化測試與 CI/CD 機制**：
+   - 專案目前缺乏自動化測試 (單元測試/整合測試) 腳本。針對包含採購與審核邏輯的核心功能，修改後仍需依賴手動測試確認，部署時請自行控管版本風險。
+3. **GAS 執行時間限制與併發上限**：
+   - Google 對單一 GAS 執行緒有 6 分鐘超時限制。大量批次處理（如匯入極大量藥品資料）時可能超時。
+   - 雖已實作 `LockService`，但在極端高併發環境（例如全校同時預約同一節課）下，仍有可能遭遇鎖定逾時 (Timeout)。
+
+---
+
+## 🧪 測試與開發 (Testing & Development)
+
+- 目前本專案**尚未建置自動化 CI/CD 流水線或單元測試**（未整合如 Jest 或 GitHub Actions 進行 GAS 單元測試）。
+- 開發者若需修改涉及金流估價、採購審核狀態、預約防衝堂等核心邏輯（集中於 `Code.js` ZONE 4 與 ZONE 7），請務必於獨立的測試用試算表與 GAS 副本中進行手動驗證，確認無誤後再行部署至正式環境。
+
+---
+
+## 🔄 版本紀錄 (Changelog)
+
+- 請參閱本專案的 [Releases](https://github.com/SamnPhysics/sci-equip-hub/releases) 頁面以獲取最新發布版本、更新內容與穩定版本資訊。建議部署時備註您所使用的版本號。
+
+---
+
+## 📜 授權條款 (License)
+
+本專案採用 **[MIT License](https://opensource.org/licenses/MIT)** 授權條款。
+作為公開範本 (Public template)，您可自由進行 Fork、修改、重製、用於學術或商業用途，唯須保留原作者著作權標示。
+
+---
+
 <div align="center">
   <sub>🏫 國立鳳新高級中學 設備組 教學資源服務平台管理系統 | 維護單位：設備組</sub>
 </div>
-
