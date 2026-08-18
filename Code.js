@@ -41,10 +41,6 @@ const UI_CONFIG = {
 const ADMIN_EMAILS_STR = ENV_PROPS['ADMIN_EMAILS'] || '';
 const ADMIN_EMAILS = ADMIN_EMAILS_STR.split(',').map(function (e) { return e.trim().toLowerCase(); }).filter(function (e) { return e !== ''; });
 
-// --- 阻擋名單規則 (支援正規表達式 RegExp 或 Email 字串) ---
-const BLOCKED_ACCOUNT_RULES = [
-  /^(s?\d{6})@/i,  // 阻擋學生帳號 (學生帳號為六位數字)
-];
 
 function isAdminUser(email) {
   if (!email) return false;
@@ -87,6 +83,45 @@ function getLoginUrl() {
     '&access_type=offline' +
     '&hd=' + encodeURIComponent(ALLOWED_DOMAIN);
   return authUrl;
+}
+
+// =====================================================================
+// 【ZONE 2.5】XSS 防護模組 (Sanitization)
+// =====================================================================
+function sanitizeHtml(str) {
+  if (typeof str !== 'string') return str;
+  return str.replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#x27;');
+}
+
+function sanitizeFormData(obj) {
+  if (obj === null || typeof obj !== 'object') return obj;
+  
+  if (Array.isArray(obj)) {
+    return obj.map(function(item) { return sanitizeFormData(item); });
+  }
+
+  var sanitizedObj = {};
+  for (var key in obj) {
+    if (Object.prototype.hasOwnProperty.call(obj, key)) {
+      if (typeof obj[key] === 'string') {
+        // 排除 base64 圖片資料，避免破壞圖檔編碼
+        if (key === 'photoBase64') {
+          sanitizedObj[key] = obj[key];
+        } else {
+          sanitizedObj[key] = sanitizeHtml(obj[key]);
+        }
+      } else if (typeof obj[key] === 'object') {
+        sanitizedObj[key] = sanitizeFormData(obj[key]);
+      } else {
+        sanitizedObj[key] = obj[key];
+      }
+    }
+  }
+  return sanitizedObj;
 }
 
 // =====================================================================
@@ -265,6 +300,7 @@ function getAuthStatus(token) {
 
 // 處理藥品/物品 批次請購表單提交
 function batchSubmitApplication(formDataArray, token) {
+  formDataArray = sanitizeFormData(formDataArray);
   try {
     var profile = verifySessionToken(token);
     var email = profile.email;
@@ -329,6 +365,7 @@ function batchSubmitApplication(formDataArray, token) {
 
 // 處理藥品/物品請購表單提交（含圖片解碼與儲存）
 function submitApplication(formData, token) {
+  formData = sanitizeFormData(formData);
   try {
     var profile = verifySessionToken(token);
     var email = profile.email;
@@ -434,6 +471,7 @@ function submitApplication(formData, token) {
 
 // 處理設備借用表單提交
 function submitEquipBorrowApplication(formData, token) {
+  formData = sanitizeFormData(formData);
   try {
     var profile = verifySessionToken(token);
     var email = profile.email;
@@ -523,6 +561,7 @@ function submitEquipBorrowApplication(formData, token) {
 
 // 處理設備採購表單提交
 function submitEquipApplication(formData, token) {
+  formData = sanitizeFormData(formData);
   try {
     var profile = verifySessionToken(token);
     var email = profile.email;
@@ -1171,6 +1210,7 @@ function getLabData() {
 }
 
 function submitLabBooking(data, token) {
+  data = sanitizeFormData(data);
   try {
     const ss = SpreadsheetApp.openById(LAB_SPREADSHEET_ID);
     const sheet = ss.getSheetByName(SHEET_NAME);
