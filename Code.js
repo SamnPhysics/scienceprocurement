@@ -86,8 +86,33 @@ function getLoginUrl() {
 }
 
 // =====================================================================
-// 【ZONE 2.5】XSS 防護模組 (Sanitization)
+// 【ZONE 2.5】XSS 防護與輸入驗證模組 (Sanitization & Validation)
 // =====================================================================
+
+// --- 輸入驗證 Helpers ---
+function validateRequired(value, fieldName) {
+  if (value === undefined || value === null || String(value).trim() === '') {
+    throw new Error('「' + fieldName + '」為必填欄位，請勿留空。');
+  }
+}
+
+function validateNumber(value, min, fieldName) {
+  var num = Number(value);
+  if (isNaN(num)) {
+    throw new Error('「' + fieldName + '」必須為數字。');
+  }
+  if (num < min) {
+    throw new Error('「' + fieldName + '」不可小於 ' + min + '。');
+  }
+}
+
+function validateLength(value, max, fieldName) {
+  if (value && String(value).length > max) {
+    throw new Error('「' + fieldName + '」長度不可超過 ' + max + ' 字元。');
+  }
+}
+
+// --- XSS 防護 Helpers ---
 function sanitizeHtml(str) {
   if (typeof str !== 'string') return str;
   return str.replace(/&/g, '&amp;')
@@ -122,6 +147,49 @@ function sanitizeFormData(obj) {
     }
   }
   return sanitizedObj;
+}
+
+// --- 具體表單驗證 Helpers ---
+function validateChemFormData(fd) {
+  validateRequired(fd.chineseName, '物品/藥品中文名稱');
+  validateLength(fd.chineseName, 100, '物品/藥品中文名稱');
+  validateRequired(fd.subject, '請勾選所需科別');
+  validateLength(fd.subject, 50, '所需科別');
+  validateRequired(fd.category, '物品分類/化學藥品狀態');
+  validateNumber(fd.quantity, 1, '所需數量');
+  validateLength(fd.englishName, 100, '藥品英文名稱');
+  validateLength(fd.remark, 1000, '備註');
+}
+
+function validateEquipBorrowFormData(fd) {
+  validateRequired(fd.item, '借用物品');
+  validateLength(fd.item, 100, '借用物品');
+  validateRequired(fd.department, '科室');
+  validateRequired(fd.purpose, '借用說明');
+  validateLength(fd.purpose, 500, '借用說明');
+  validateNumber(fd.quantity, 1, '數量');
+  validateLength(fd.remark, 1000, '備註');
+}
+
+function validateEquipFormData(fd) {
+  validateRequired(fd.equipName, '設備名稱/軟體名稱');
+  validateLength(fd.equipName, 100, '設備名稱/軟體名稱');
+  validateRequired(fd.applySubject, '申請科別');
+  validateRequired(fd.purpose, '需求及用途說明');
+  validateLength(fd.purpose, 1000, '需求及用途說明');
+  validateNumber(fd.quantity, 1, '數量');
+  validateNumber(fd.price, 0, '自估單價');
+  validateLength(fd.remark, 1000, '備註');
+}
+
+function validateLabBookingData(fd) {
+  validateRequired(fd.date, '預約日期');
+  validateRequired(fd.room, '預約場地');
+  validateRequired(fd.start, '開始時間');
+  validateRequired(fd.end, '結束時間');
+  validateRequired(fd.title, '課程/活動名稱');
+  validateLength(fd.title, 100, '課程/活動名稱');
+  validateLength(fd.remark, 1000, '備註');
 }
 
 // =====================================================================
@@ -302,6 +370,9 @@ function getAuthStatus(token) {
 function batchSubmitApplication(formDataArray, token) {
   formDataArray = sanitizeFormData(formDataArray);
   try {
+    for (var i = 0; i < formDataArray.length; i++) {
+      validateChemFormData(formDataArray[i]);
+    }
     var profile = verifySessionToken(token);
     var email = profile.email;
     if (!email || !email.toLowerCase().endsWith('@' + ALLOWED_DOMAIN)) {
@@ -367,6 +438,7 @@ function batchSubmitApplication(formDataArray, token) {
 function submitApplication(formData, token) {
   formData = sanitizeFormData(formData);
   try {
+    validateChemFormData(formData);
     var profile = verifySessionToken(token);
     var email = profile.email;
     if (!email || !email.toLowerCase().endsWith('@' + ALLOWED_DOMAIN)) {
@@ -473,6 +545,7 @@ function submitApplication(formData, token) {
 function submitEquipBorrowApplication(formData, token) {
   formData = sanitizeFormData(formData);
   try {
+    validateEquipBorrowFormData(formData);
     var profile = verifySessionToken(token);
     var email = profile.email;
     if (!email || !email.toLowerCase().endsWith('@' + ALLOWED_DOMAIN)) {
@@ -563,6 +636,7 @@ function submitEquipBorrowApplication(formData, token) {
 function submitEquipApplication(formData, token) {
   formData = sanitizeFormData(formData);
   try {
+    validateEquipFormData(formData);
     var profile = verifySessionToken(token);
     var email = profile.email;
     if (!email || !email.toLowerCase().endsWith('@' + ALLOWED_DOMAIN)) {
@@ -1212,6 +1286,7 @@ function getLabData() {
 function submitLabBooking(data, token) {
   data = sanitizeFormData(data);
   try {
+    validateLabBookingData(data);
     const ss = SpreadsheetApp.openById(LAB_SPREADSHEET_ID);
     const sheet = ss.getSheetByName(SHEET_NAME);
     if (!sheet) throw new Error('找不到表單回應 1');
