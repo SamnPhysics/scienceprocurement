@@ -125,6 +125,14 @@
     
     try {
       await ApiService.auth.logout(getToken());
+      
+      const isPublic = localStorage.getItem('isPublicComputer') === 'true';
+      if (isPublic) {
+        localStorage.clear();
+        window.location.href = 'https://accounts.google.com/Logout';
+        return;
+      }
+
       localStorage.removeItem('my_app_token');
       const status = await ApiService.auth.getStatus(getToken());
       if (typeof setupUI === 'function') setupUI(status);

@@ -142,6 +142,7 @@
         const pubCb = AUTH_DOM.get('is-public-computer');
         if (pubCb && pubCb.checked) {
           // 公用電腦模式：先強制登出 Google 所有帳號，徹底避免 GAS 多重帳號 Bug
+          localStorage.setItem('isPublicComputer', 'true');
           LoginManager.openPopup('https://accounts.google.com/Logout');
           setTimeout(() => {
             if (LoginManager.popup && !LoginManager.popup.closed) {
@@ -149,6 +150,8 @@
             }
           }, 2000);
           return;
+        } else {
+          localStorage.removeItem('isPublicComputer');
         }
         LoginManager.openPopup(finalUrl);
       } else {
@@ -158,6 +161,7 @@
             let finalUrl = url;
             const pubCb = AUTH_DOM.get('is-public-computer');
             if (pubCb && pubCb.checked) {
+              localStorage.setItem('isPublicComputer', 'true');
               LoginManager.openPopup('https://accounts.google.com/Logout');
               setTimeout(() => {
                 if (LoginManager.popup && !LoginManager.popup.closed) {
@@ -165,6 +169,8 @@
                 }
               }, 2000);
               return;
+            } else {
+              localStorage.removeItem('isPublicComputer');
             }
             window.cachedLoginUrl = finalUrl;
             LoginManager.openPopup(finalUrl);

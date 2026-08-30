@@ -183,13 +183,11 @@ function validateEquipFormData(fd) {
 }
 
 function validateLabBookingData(fd) {
-  validateRequired(fd.date, '預約日期');
-  validateRequired(fd.room, '預約場地');
-  validateRequired(fd.start, '開始時間');
-  validateRequired(fd.end, '結束時間');
-  validateRequired(fd.title, '課程/活動名稱');
-  validateLength(fd.title, 100, '課程/活動名稱');
-  validateLength(fd.remark, 1000, '備註');
+  validateRequired(fd['使用日期'], '使用日期');
+  validateRequired(fd['使用實驗室'], '預約場地(實驗室)');
+  validateRequired(fd['使用節次'], '使用節次');
+  validateRequired(fd['實驗名稱/課程內容'], '實驗名稱/課程內容');
+  validateLength(fd['實驗名稱/課程內容'], 100, '實驗名稱/課程內容');
 }
 
 // =====================================================================
@@ -854,6 +852,7 @@ function deleteUserRequests(rowNumbers, token, system) {
 
     rowNumbers.sort(function (a, b) { return b - a; });
 
+    var validRowsToDelete = [];
     for (var i = 0; i < rowNumbers.length; i++) {
       var rowNum = rowNumbers[i];
       if (rowNum < 2 || rowNum > data.length) {
@@ -867,10 +866,14 @@ function deleteUserRequests(rowNumbers, token, system) {
         (rowEmail === '' && (rowApplicant === applicantName || rowApplicant === normalizedEmail.split('@')[0]));
 
       if (isOwner) {
-        sheet.deleteRow(rowNum);
+        validRowsToDelete.push(rowNum);
       } else {
         throw new Error('安全性錯誤：您無權刪除其他人的請購項目！');
       }
+    }
+
+    if (validRowsToDelete.length > 0) {
+      batchDeleteRows_(sheet, validRowsToDelete);
     }
 
     // 清除快取，讓下次讀取能抓到最新資料
@@ -924,6 +927,19 @@ function getSystemSheet_(system) {
   }
   var ss = SpreadsheetApp.openById(targetSheetId);
   return ss.getSheetByName(SHEET_NAME) || ss.getSheets()[0];
+}
+
+function batchDeleteRows_(sheet, rowNumbers) {
+  if (!rowNumbers || rowNumbers.length === 0) return;
+  // 去重複並由大到小排序 (由下往上刪除才不會影響未處理的列號)
+  var uniqueRows = rowNumbers.filter(function(item, pos) {
+    return rowNumbers.indexOf(item) === pos;
+  }).sort(function(a, b) { return b - a; });
+
+  // 放棄使用 sheet.deleteRows(start, count)，改用逐列刪除確保 100% 成功率與穩定性
+  for (var i = 0; i < uniqueRows.length; i++) {
+    sheet.deleteRow(uniqueRows[i]);
+  }
 }
 
 function saveBase64ImageToDrive_(base64Str, fileName) {
@@ -1342,6 +1358,8 @@ function submitLabBooking(data, token) {
     let conflicts = [];
     let groupId = isRecurring ? Utilities.getUuid() : '';
 
+    let rowsToInsert = [];
+
     // 逐一檢查每一個欲預約的日期與節次
     for (let i = 0; i < datesToBook.length; i++) {
       let curD = datesToBook[i];
@@ -1377,8 +1395,13 @@ function submitLabBooking(data, token) {
           '', // 第14欄預留
           groupId // 第15欄: groupId
         ];
-        sheet.appendRow(row);
+        rowsToInsert.push(row);
       }
+    }
+
+    if (rowsToInsert.length > 0) {
+      let lastRow = sheet.getLastRow();
+      sheet.getRange(lastRow + 1, 1, rowsToInsert.length, rowsToInsert[0].length).setValues(rowsToInsert);
     }
 
     return { success: true, conflicts: conflicts };
@@ -1429,7 +1452,10 @@ function cancelLabBooking(rowNumber, token, cancelSeries) {
     }
 
     var groupId = String(row[14] || '').trim();
-    if (cancelSeries === true && groupId) {
+    // 確保 cancelSeries 變數能正確被判定為 true (防範字串傳遞)
+    var isCancelSeries = (cancelSeries === true || String(cancelSeries) === 'true');
+    
+    if (isCancelSeries && groupId) {
       // 找出同 groupId 的所有列 (從後面刪除以避免列號偏移)
       var rowsToDelete = [];
       // 僅刪除「未來與當下(包含今天)」的預約，過去的不刪除
@@ -1442,13 +1468,19 @@ function cancelLabBooking(rowNumber, token, cancelSeries) {
           }
         }
       }
-      rowsToDelete.sort(function (a, b) { return b - a; });
-      rowsToDelete.forEach(function (rn) {
-        sheet.deleteRow(rn);
-      });
+      
+      if (rowsToDelete.length > 0) {
+        batchDeleteRows_(sheet, rowsToDelete);
+      } else {
+        // Fallback: 如果因為時間判定沒抓到任何列，至少刪除當前點擊的這筆
+        sheet.deleteRow(rowNumber);
+      }
     } else {
       sheet.deleteRow(rowNumber);
     }
+    
+    // 清除快取，讓下次讀取能抓到最新資料 (解決前端重新整理仍看到舊資料的問題)
+    CacheService.getScriptCache().remove('sheet_data_cache_v2_lab');
     return { success: true };
   } catch (error) {
     return { success: false, message: error.toString() };

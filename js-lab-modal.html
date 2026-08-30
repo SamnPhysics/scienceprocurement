@@ -688,6 +688,7 @@
       
       if (res.success) {
         alert(cancelMode === 'series' ? '已成功取消該系列未來的所有教室預約！' : '已成功取消該次教室預約！');
+        if (window.SystemCache) window.SystemCache.invalidate('labData');
         if (typeof fetchLabBackendData === 'function') fetchLabBackendData();
       } else {
         alert('取消失敗：' + (res.message || '未知錯誤'));
