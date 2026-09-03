@@ -127,6 +127,7 @@
       await ApiService.auth.logout(getToken());
       
       const isPublic = localStorage.getItem('isPublicComputer') === 'true';
+<<<<<<< HEAD
       
       if (isPublic) {
         localStorage.clear();
@@ -140,6 +141,11 @@
         if (userAgreed) {
           window.open('https://accounts.google.com/Logout', '_blank');
         }
+=======
+      if (isPublic) {
+        localStorage.clear();
+        window.location.href = 'https://accounts.google.com/Logout';
+>>>>>>> 65712019ce033def74139f2e9c55f85491b71079
         return;
       }
 
