@@ -136,66 +136,23 @@
     btnAuth.href = "#";
     btnAuth.onclick = function (e) {
       e.preventDefault();
-      const targetUrl = loginUrl || window.cachedLoginUrl;
+      const targetUrl = window.templateLoginUrl || loginUrl || window.cachedLoginUrl;
       if (targetUrl) {
-        let finalUrl = targetUrl;
         const pubCb = AUTH_DOM.get('is-public-computer');
         if (pubCb && pubCb.checked) {
-          // 公用電腦模式：先強制登出 Google 所有帳號，徹底避免 GAS 多重帳號 Bug
           localStorage.setItem('isPublicComputer', 'true');
-          LoginManager.openPopup('https://accounts.google.com/Logout');
-          setTimeout(() => {
-            if (LoginManager.popup && !LoginManager.popup.closed) {
-              LoginManager.popup.location.href = finalUrl;
-            }
-          }, 2000);
-          return;
         } else {
           localStorage.removeItem('isPublicComputer');
         }
-        LoginManager.openPopup(finalUrl);
+        LoginManager.openPopup(targetUrl);
       } else {
-        btnAuth.innerText = '載入中...';
-        ApiService.auth.getLoginUrl()
-          .then(url => {
-            let finalUrl = url;
-            const pubCb = AUTH_DOM.get('is-public-computer');
-            if (pubCb && pubCb.checked) {
-              localStorage.setItem('isPublicComputer', 'true');
-              LoginManager.openPopup('https://accounts.google.com/Logout');
-              setTimeout(() => {
-                if (LoginManager.popup && !LoginManager.popup.closed) {
-                  LoginManager.popup.location.href = finalUrl;
-                }
-              }, 2000);
-              return;
-            } else {
-              localStorage.removeItem('isPublicComputer');
-            }
-            window.cachedLoginUrl = finalUrl;
-            LoginManager.openPopup(finalUrl);
-          })
-          .catch(err => {
-            btnAuth.innerText = '登入';
-            alert('無法取得登入網址，請稍後再試或重新整理網頁。');
-          });
+        alert('無法取得登入網址，請稍後再試或重新整理網頁。');
       }
     };
     btnAuth.className = "px-3.5 py-1.5 rounded-md bg-slate-200 text-slate-800 font-medium shadow-sm hover:bg-slate-300 transition text-sm flex items-center gap-1 ml-2";
 
     const pubWrapper = AUTH_DOM.get('public-computer-wrapper');
     if (pubWrapper) pubWrapper.classList.remove('hidden');
-
-    // 定期更新 login url
-    if (!window.loginUrlInterval) {
-      window.loginUrlInterval = setInterval(function () {
-        ApiService.auth.getLoginUrl().then(url => {
-          if (btnAuth.innerText === '登入') {
-            window.cachedLoginUrl = url;
-          }
-        }).catch(err => console.warn('Failed to refresh login url:', err));
-      }, 8 * 60 * 1000);
-    }
   }
 
   /**
@@ -526,21 +483,33 @@
   // ==========================================
   // 全域初始化邏輯 (執行於 js-auth 與 js-switch 皆已載入後)
   // ==========================================
-  setupUI({ loggedIn: false, role: 'guest', loginUrl: '' });
+  const storedToken = typeof getToken === 'function' ? getToken() : null;
+  const hasToken = (typeof templateSessionToken !== 'undefined' && templateSessionToken) || storedToken;
+  
+  if (hasToken) {
+    try {
+      const cached = localStorage.getItem('cached_auth_status');
+      if (cached) {
+        setupUI(JSON.parse(cached));
+      } else {
+        setupUI({ loggedIn: false, role: 'guest', loginUrl: '' });
+      }
+    } catch(e) {
+      setupUI({ loggedIn: false, role: 'guest', loginUrl: '' });
+    }
+  } else {
+    setupUI({ loggedIn: false, role: 'guest', loginUrl: '' });
+  }
+
   hideLoadingOverlay();
 
-  ApiService.auth.getLoginUrl()
-    .then(url => {
-      window.cachedLoginUrl = url;
-      const btnAuth = document.getElementById('btn-login-logout');
-      if (btnAuth && btnAuth.innerText === '登入') btnAuth.href = url;
-    })
-    .catch(err => console.warn('Failed to get initial login url:', err));
+  if (window.templateLoginUrl) {
+    window.cachedLoginUrl = window.templateLoginUrl;
+    const btnAuth = document.getElementById('btn-login-logout');
+    if (btnAuth && btnAuth.innerText === '登入') btnAuth.href = window.templateLoginUrl;
+  }
 
-  if (typeof checkAuthStatus === 'function') {
-    const storedToken = typeof getToken === 'function' ? getToken() : null;
-    if ((typeof templateSessionToken !== 'undefined' && templateSessionToken) || storedToken) {
-      checkAuthStatus();
-    }
+  if (typeof checkAuthStatus === 'function' && hasToken) {
+    checkAuthStatus();
   }
 </script>

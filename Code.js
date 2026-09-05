@@ -80,7 +80,7 @@ function getLoginUrl() {
     '&redirect_uri=' + encodeURIComponent(getAppUrl()) +
     '&response_type=code' +
     '&scope=' + encodeURIComponent('openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile') +
-    '&access_type=offline' +
+    '&prompt=select_account' +
     '&hd=' + encodeURIComponent(ALLOWED_DOMAIN);
   return authUrl;
 }
@@ -212,6 +212,7 @@ function doGet(e) {
     template.systemDesc = UI_CONFIG.systemDesc;
     template.logoId = UI_CONFIG.logoId;
     template.allowedDomain = ALLOWED_DOMAIN;
+    template.loginUrl = getLoginUrl();
 
     return template.evaluate()
       .setTitle(template.systemTitle)
@@ -221,6 +222,17 @@ function doGet(e) {
 }
 
 // ====== 後端處理 OAuth Callback 與發放 Token ======
+
+// 新增：快速解析 Google ID Token (JWT Payload)
+function parseJwtPayload_(jwt) {
+  if (!jwt) return null;
+  var parts = jwt.split('.');
+  if (parts.length < 2) return null;
+  var b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+  while (b64.length % 4) b64 += '=';
+  var jsonStr = Utilities.newBlob(Utilities.base64Decode(b64)).getDataAsString('utf-8');
+  return JSON.parse(jsonStr);
+}
 
 function processOAuthCallback(code) {
   try {
@@ -242,30 +254,50 @@ function processOAuthCallback(code) {
       throw new Error('Token 交換失敗: ' + tokenData.error_description);
     }
 
-    const accessToken = tokenData.access_token;
-
-    // 2. 取得 UserInfo
-    const userResponse = UrlFetchApp.fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-      headers: { Authorization: 'Bearer ' + accessToken },
-      muteHttpExceptions: true
-    });
-
-    const userData = JSON.parse(userResponse.getContentText());
-    if (userData.error) {
-      throw new Error('無法獲取使用者資訊');
-    }
+    // 2. 直接從 id_token 取出使用者資訊 (免去第二次 UrlFetchApp！)
+    const payload = parseJwtPayload_(tokenData.id_token) || {};
+    const email = (payload.email || '').trim();
 
     const profile = {
-      email: userData.email || '',
-      name: userData.name || '',
-      picture: userData.picture || ''
+      email: email,
+      name: payload.name || '',
+      picture: payload.picture || ''
     };
 
     // 3. 產生專屬 Session Token 並寫入 Cache (保存 30 分鐘 = 1800 秒，考量公用電腦安全性)
     const sessionToken = Utilities.getUuid();
     CacheService.getScriptCache().put('session_' + sessionToken, JSON.stringify(profile), 1800);
 
-    // 4. 回傳一段腳本，讓整個畫面導向帶有 Token 的網址
+    // 4. 先行計算好權限狀態，直接夾帶在彈窗訊息中傳回前端
+    var displayName = profile.name || email.split('@')[0];
+    var role = 'guest';
+    var message = '';
+    
+    if (!ALLOWED_DOMAIN || ALLOWED_DOMAIN === '請設定 ALLOWED_DOMAIN') {
+      role = 'invalid';
+      message = '系統尚未設定允許登入的組織網域 (ALLOWED_DOMAIN)';
+    } else if (!email.toLowerCase().endsWith('@' + ALLOWED_DOMAIN.toLowerCase().trim())) {
+      role = 'invalid';
+      message = '非允許登入的組織網域，僅限 @' + ALLOWED_DOMAIN + ' 帳號使用';
+    } else if (isAdminUser(email)) {
+      role = 'admin';
+    } else if (isStudentAccount(email)) {
+      role = 'student';
+      message = '學生帳號僅開放「設備借用」與「自然科實驗室預約」，無權限進行藥品請購與設備申請。';
+    } else {
+      role = 'teacher';
+    }
+
+    var authStatus = {
+      loggedIn: role !== 'invalid',
+      email: email,
+      displayName: displayName,
+      role: role,
+      picture: profile.picture,
+      message: message
+    };
+
+    // 5. 回傳一段腳本，讓整個畫面導向帶有 Token 的網址
     var appUrl = getAppUrl();
     var redirectUrl = appUrl + (appUrl.indexOf('?') === -1 ? '?' : '&') + 'session_token=' + encodeURIComponent(sessionToken);
 
@@ -294,13 +326,14 @@ function processOAuthCallback(code) {
       + '<\/div>'
       + '<script>(function(){'
       + 'var tk="' + sessionToken + '";'
+      + 'var authStatus=' + JSON.stringify(authStatus) + ';'
       + 'function send(){'
-      + 'try{localStorage.setItem("gas_auth_result",JSON.stringify({token:tk,ts:Date.now()}));}catch(ls){}'
-      + 'try{if(window.opener&&!window.opener.closed){window.opener.postMessage({type:"gas_oauth_token",token:tk},"*");}}catch(e1){}'
-      + 'try{if(window.parent!==window){window.parent.postMessage({type:"gas_oauth_token",token:tk},"*");}}catch(e2){}'
+      + 'try{localStorage.setItem("gas_auth_result",JSON.stringify({token:tk,authStatus:authStatus,ts:Date.now()}));}catch(ls){}'
+      + 'try{if(window.opener&&!window.opener.closed){window.opener.postMessage({type:"gas_oauth_token",token:tk,authStatus:authStatus},"*");}}catch(e1){}'
+      + 'try{if(window.parent!==window){window.parent.postMessage({type:"gas_oauth_token",token:tk,authStatus:authStatus},"*");}}catch(e2){}'
       + 'var btn=document.getElementById("go");'
-      + 'if(btn){btn.href="#";btn.onclick=function(e){e.preventDefault();try{localStorage.setItem("gas_auth_result",JSON.stringify({token:tk,ts:Date.now()}));}catch(ls){}try{window.close();}catch(x){btn.textContent="\u767b\u5165\u5b8c\u6210\uff01\u8acb\u624b\u52d5\u95dc\u9589\u6b64\u8996\u7a97";btn.style.background="#6b7280";}};}'
-      + 'setTimeout(function(){try{window.close();}catch(x){}},1800);'
+      + 'if(btn){btn.href="#";btn.onclick=function(e){e.preventDefault();try{localStorage.setItem("gas_auth_result",JSON.stringify({token:tk,authStatus:authStatus,ts:Date.now()}));}catch(ls){}try{window.close();}catch(x){btn.textContent="\u767b\u5165\u5b8c\u6210\uff01\u8acb\u624b\u52d5\u95dc\u9589\u6b64\u8996\u7a97";btn.style.background="#6b7280";}};}'
+      + 'setTimeout(function(){try{window.close();}catch(x){}},400);'
       + '}'
       + 'if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",send);}else{send();}'
       + '})();<\/script>'
