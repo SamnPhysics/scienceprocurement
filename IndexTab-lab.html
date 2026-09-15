@@ -157,45 +157,54 @@
     </div>
 
     <!-- 時間軸網格視圖容器 -->
-    <div class="flex-1 bg-white rounded-xl shadow-sm overflow-hidden flex flex-col relative border border-gray-200">
-
-      <!-- X軸標頭 -->
-      <div class="flex border-b border-gray-200 bg-gray-50 shrink-0">
-        <!-- 左上角空白處 -->
-        <div class="w-44 shrink-0 border-r border-gray-200 p-4 flex items-center text-sm font-bold text-gray-500">
-          空間 / 教室列表
-        </div>
-        <!-- 日表時間軸標頭 -->
-        <div class="flex-1 relative flex text-xs font-medium text-gray-500 transition-opacity duration-300"
-          id="time-header">
-          <!-- 透過 JS 動態生成 08:00 ~ 18:00 -->
-        </div>
-        <!-- 週表日期標頭 (預設隱藏) -->
-        <div
-          class="flex-1 relative hidden grid-cols-5 text-xs font-medium text-gray-500 transition-opacity duration-300"
-          id="week-header">
-          <!-- 由 JS 動態生成當週真實日期 (週一至週五) -->
-        </div>
-      </div>
-
-      <!-- Y軸教室與內部時間網格 (可捲動區域) -->
-      <div class="flex-1 overflow-y-auto relative no-scrollbar" id="timeline-body">
-        <!-- 內部包裝容器：確保目前時間紅線能隨著教室資料的高低自動調整完整長度 -->
-        <div class="relative min-h-full flex flex-col">
-          <!-- 現在時間指示線 (紅色垂直線，僅日檢視顯示) -->
-          <div id="current-time-line" class="absolute top-0 bottom-0 w-px bg-red-500 z-10 pointer-events-none hidden"
-            style="left: calc(176px + (100% - 176px) * 0.366);">
-            <div class="absolute -top-1 -translate-x-1/2 w-3 h-3 rounded-full bg-red-500"></div>
+    <div class="flex-1 bg-white rounded-xl shadow-sm overflow-x-auto overflow-y-hidden flex flex-col relative border border-gray-200">
+      <!-- 加入 style="min-width: 800px;" 確保手機版不會被過度擠壓，並允許橫向滑動 -->
+      <div class="flex flex-col flex-1 h-full" style="min-width: 800px;">
+        <!-- X軸標頭 -->
+        <div class="flex border-b border-gray-200 bg-gray-50 shrink-0">
+          <!-- 左上角空白處 -->
+          <div class="w-44 shrink-0 border-r border-gray-200 p-4 flex items-center text-sm font-bold text-gray-500">
+            空間 / 教室列表
           </div>
+          <!-- 日表時間軸標頭 -->
+          <div class="flex-1 relative flex text-xs font-medium text-gray-500 transition-opacity duration-300"
+            id="time-header">
+            <!-- 透過 JS 動態生成 08:00 ~ 18:00 -->
+          </div>
+          <!-- 週表日期標頭 (預設隱藏) -->
+          <div
+            class="flex-1 relative hidden grid-cols-5 text-xs font-medium text-gray-500 transition-opacity duration-300"
+            id="week-header">
+            <!-- 由 JS 動態生成當週真實日期 (週一至週五) -->
+          </div>
+        </div>
 
-          <!-- 教室資料列 (透過 JS 動態生成) -->
-          <div id="rooms-container" class="flex flex-col flex-1">
-            <!-- 內容由 JS 填充 -->
+        <!-- Y軸教室與內部時間網格 (可捲動區域) -->
+        <div class="flex-1 overflow-y-auto relative no-scrollbar" id="timeline-body">
+          <!-- 內部包裝容器：確保目前時間紅線能隨著教室資料的高低自動調整完整長度 -->
+          <div class="relative min-h-full flex flex-col">
+            <!-- 現在時間指示線 (紅色垂直線，僅日檢視顯示) -->
+            <div id="current-time-line" class="absolute top-0 bottom-0 w-px bg-red-500 z-10 pointer-events-none hidden"
+              style="left: calc(176px + (100% - 176px) * 0.366);">
+              <div class="absolute -top-1 -translate-x-1/2 w-3 h-3 rounded-full bg-red-500"></div>
+            </div>
+
+            <!-- 教室資料列 (透過 JS 動態生成) -->
+            <div id="rooms-container" class="flex flex-col flex-1">
+              <!-- 內容由 JS 填充 -->
+            </div>
           </div>
         </div>
       </div>
     </div>
   </div>
+
+  <!-- 快速預約 FAB -->
+  <button onclick="openLabNewBookingModal()"
+    class="fixed bg-blue-600 text-white rounded-full shadow-lg flex items-center justify-center hover:bg-blue-700 active:scale-95 transition-transform"
+    style="bottom: 2rem; right: 1.5rem; width: 3.5rem; height: 3.5rem; z-index: 60;">
+    <i class="fa-solid fa-plus text-2xl"></i>
+  </button>
 
   <!-- 注入的 Modals -->
   <!-- 預約彈窗 (Modal) -->

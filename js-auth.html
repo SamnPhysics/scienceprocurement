@@ -26,8 +26,18 @@
       }
       const w = 520;
       const h = 650;
-      const left = (screen.width - w) / 2;
-      const top = (screen.height - h) / 2;
+      
+      // 支援多螢幕與相對瀏覽器視窗居中
+      const dualScreenLeft = window.screenLeft !== undefined ? window.screenLeft : window.screenX;
+      const dualScreenTop = window.screenTop !== undefined ? window.screenTop : window.screenY;
+
+      const width = window.innerWidth ? window.innerWidth : document.documentElement.clientWidth ? document.documentElement.clientWidth : screen.width;
+      const height = window.innerHeight ? window.innerHeight : document.documentElement.clientHeight ? document.documentElement.clientHeight : screen.height;
+
+      const systemZoom = width / window.screen.availWidth;
+      const left = (width - w) / 2 / systemZoom + dualScreenLeft;
+      const top = (height - h) / 2 / systemZoom + dualScreenTop;
+
       this.popup = window.open(loginUrl, 'gas_oauth_popup', `width=${w},height=${h},top=${top},left=${left},scrollbars=yes,resizable=yes`);
       if (!this.popup || this.popup.closed || typeof this.popup.closed === 'undefined') {
         // 若瀏覽器封鎖彈窗或為 LINE 內建瀏覽器，直接在當前頁面跳轉

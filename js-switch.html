@@ -234,11 +234,10 @@
     }
 
     // 4. 切換頁面與預先載入資料
-    if (isInvalid || isStudent || isGuest) {
-      switchView('apply');
-      if (AppState.currentSystemTab === 'lab' && typeof fetchLabBackendData === 'function' && isStudent) {
-        fetchLabBackendData();
-      }
+    switchApplyForm(AppState.currentSystemTab || 'lab');
+    
+    if (AppState.currentSystemTab === 'lab' && typeof fetchLabBackendData === 'function' && isStudent) {
+      fetchLabBackendData();
     }
   }
 

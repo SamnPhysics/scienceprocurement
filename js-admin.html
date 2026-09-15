@@ -333,12 +333,26 @@
 
     if (system === 'chem') {
       title = '藥品/物品 審核明細';
+      
+      const renderField = (label, value, isBlock = false) => `
+        <div class="${isBlock ? 'py-3' : 'sm:flex sm:items-start py-3'} border-b border-slate-100 last:border-0">
+          <div class="${isBlock ? 'mb-1' : 'sm:w-1/3 shrink-0 mb-1 sm:mb-0'} font-semibold text-slate-600">${label}</div>
+          <div class="${isBlock ? '' : 'sm:w-2/3'} text-slate-800 break-words whitespace-pre-wrap">${value || '無'}</div>
+        </div>
+      `;
+
       contentHtml = `
-        <div class="space-y-3 text-slate-700">
-          <p><strong>中文名稱：</strong>${item.chineseName || '無'}</p>
-          <p><strong>所需數量：</strong>${item.quantity || '無'}</p>
-          <p><strong>備註：</strong><br><span class="whitespace-pre-wrap">${item.remark || item.purpose || '無'}</span></p>
-          <div><strong>物品/藥品照片：</strong>${photoHtml}</div>
+        <div class="text-sm">
+          ${renderField('中文名稱', item.chineseName)}
+          ${renderField('藥品英文名稱 <div class="text-xs font-normal text-slate-400 mt-0.5">(含化學式、分子量)</div>', item.englishName)}
+          ${renderField('物品分類/狀態', item.category)}
+          ${renderField('所需數量', item.quantity)}
+          ${renderField('課程使用時間', item.usageTime)}
+          ${renderField('備註', item.remark || item.purpose, true)}
+          <div class="py-3">
+            <div class="font-semibold text-slate-600 mb-2">物品/藥品照片</div>
+            <div>${photoHtml}</div>
+          </div>
         </div>
       `;
     } else if (system === 'equipBorrow') {

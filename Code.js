@@ -528,7 +528,7 @@ function submitApplication(formData, token) {
 
       appendRowFromMap_(sheet, rowDataMap);
 
-      CacheService.getScriptCache().remove('sheet_data_cache_v2_chem');
+      removeCachedData('sheet_data_cache_v2_chem');
     } finally {
       lock.releaseLock();
     }
@@ -635,7 +635,7 @@ function submitEquipBorrowApplication(formData, token) {
 
       appendRowFromMap_(sheet, rowDataMap, headers);
 
-      CacheService.getScriptCache().remove('sheet_data_cache_v2_equipBorrow');
+      removeCachedData('sheet_data_cache_v2_equipBorrow');
     } finally {
       lock.releaseLock();
     }
@@ -731,7 +731,7 @@ function submitEquipApplication(formData, token) {
 
       appendRowFromMap_(sheet, rowDataMap, headers);
 
-      CacheService.getScriptCache().remove('sheet_data_cache_v2_equip');
+      removeCachedData('sheet_data_cache_v2_equip');
     } finally {
       lock.releaseLock();
     }
@@ -840,7 +840,7 @@ function batchUpdateProcurementStatus(updates, token, system) {
       }
     });
 
-    CacheService.getScriptCache().remove('sheet_data_cache_v2_' + (system || 'chem'));
+    removeCachedData('sheet_data_cache_v2_' + (system || 'chem'));
     return { success: true };
   } catch (error) {
     return { success: false, message: error.toString() };
@@ -910,7 +910,7 @@ function deleteUserRequests(rowNumbers, token, system) {
     }
 
     // 清除快取，讓下次讀取能抓到最新資料
-    CacheService.getScriptCache().remove('sheet_data_cache_v2_' + (system || 'chem'));
+    removeCachedData('sheet_data_cache_v2_' + (system || 'chem'));
     return { success: true };
   } catch (error) {
     return { success: false, message: error.toString() };
@@ -922,7 +922,7 @@ function deleteUserRequests(rowNumbers, token, system) {
 // 登出：清除後端快取
 function logoutOAuth(token) {
   if (token) {
-    CacheService.getScriptCache().remove('session_' + token);
+    removeCachedData('session_' + token);
   }
   return { success: true };
 }
@@ -1066,9 +1066,8 @@ function mapSheetRow(row, index, colMap) {
 // =====================================================================
 
 function getSheetData(system) {
-  var cache = CacheService.getScriptCache();
   var cacheKey = 'sheet_data_cache_v2_' + (system || 'chem');
-  var cachedData = cache.get(cacheKey);
+  var cachedData = getCachedData(cacheKey);
   if (cachedData) {
     try { return JSON.parse(cachedData); } catch (e) { }
   }
@@ -1093,7 +1092,7 @@ function getSheetData(system) {
   var reversedData = mappedData.reverse();
   try {
     // 快取 5 分鐘 (300秒，平衡讀取效能與資料即時性)
-    cache.put(cacheKey, JSON.stringify(reversedData), 300);
+    putCachedData(cacheKey, JSON.stringify(reversedData), 300);
   } catch (e) { }
 
   return reversedData;
@@ -1213,6 +1212,12 @@ function include(filename, data) {
 // =====================================================================
 
 function getLabData() {
+  var cacheKey = 'sheet_data_cache_v2_lab';
+  var cachedData = getCachedData(cacheKey);
+  if (cachedData) {
+    try { return JSON.parse(cachedData); } catch (e) { }
+  }
+
   try {
     const ss = SpreadsheetApp.openById(LAB_SPREADSHEET_ID);
 
@@ -1320,12 +1325,18 @@ function getLabData() {
       }
     });
 
-    return {
+    var result = {
       rooms: rooms,
       periods: periods,
       bookings: bookings,
       weeklyBookings: weeklyBookings
     };
+
+    try {
+      putCachedData(cacheKey, JSON.stringify(result), 300);
+    } catch (e) { }
+
+    return result;
 
   } catch (e) {
     throw new Error('取得資料失敗: ' + e.message);
@@ -1437,6 +1448,8 @@ function submitLabBooking(data, token) {
       sheet.getRange(lastRow + 1, 1, rowsToInsert.length, rowsToInsert[0].length).setValues(rowsToInsert);
     }
 
+    removeCachedData('sheet_data_cache_v2_lab');
+
     return { success: true, conflicts: conflicts };
   } catch (e) {
     throw new Error('送出預約失敗: ' + e.message);
@@ -1513,11 +1526,97 @@ function cancelLabBooking(rowNumber, token, cancelSeries) {
     }
     
     // 清除快取，讓下次讀取能抓到最新資料 (解決前端重新整理仍看到舊資料的問題)
-    CacheService.getScriptCache().remove('sheet_data_cache_v2_lab');
+    removeCachedData('sheet_data_cache_v2_lab');
     return { success: true };
   } catch (error) {
     return { success: false, message: error.toString() };
   } finally {
     lock.releaseLock();
   }
+}
+
+// =====================================================================
+// 【防冷啟動機制】 (Keep-Alive)
+// =====================================================================
+/**
+ * 為了避免 Google Apps Script 的冷啟動問題導致首次載入過慢，
+ * 可設定時間驅動觸發器 (Time-driven trigger) 每 5 分鐘執行此函式。
+ */
+function keepAlive() {
+  var url = PropertiesService.getScriptProperties().getProperty('WEB_APP_URL');
+  if (url) {
+    try {
+      UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+      console.log("Keep-alive ping success.");
+    } catch (e) {
+      console.error("Keep-alive ping failed:", e);
+    }
+  } else {
+    console.warn("尚未設定 WEB_APP_URL，無法執行 keepAlive。");
+  }
+}
+
+// =====================================================================
+// 【進階快取機制】 (Chunked CacheService)
+// 解決 Google Apps Script CacheService 單一 Key 最高 100KB 的限制
+// =====================================================================
+var CHUNK_SIZE = 90000; // 90KB 安全上限
+
+function putCachedData(key, dataStr, expirationInSeconds) {
+  var cache = CacheService.getScriptCache();
+  if (dataStr.length <= CHUNK_SIZE) {
+    cache.put(key, dataStr, expirationInSeconds);
+    cache.put(key + '_chunks', '1', expirationInSeconds);
+  } else {
+    var numChunks = Math.ceil(dataStr.length / CHUNK_SIZE);
+    var chunkObj = {};
+    for (var i = 0; i < numChunks; i++) {
+      var chunk = dataStr.substring(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+      chunkObj[key + '_' + i] = chunk;
+    }
+    cache.putAll(chunkObj, expirationInSeconds);
+    cache.put(key + '_chunks', String(numChunks), expirationInSeconds);
+  }
+}
+
+function getCachedData(key) {
+  var cache = CacheService.getScriptCache();
+  var numChunksStr = cache.get(key + '_chunks');
+  if (!numChunksStr) return null; // 完全沒命中
+  
+  var numChunks = parseInt(numChunksStr, 10);
+  if (numChunks === 1) {
+    return cache.get(key);
+  } else {
+    var keys = [];
+    for (var i = 0; i < numChunks; i++) {
+      keys.push(key + '_' + i);
+    }
+    var chunks = cache.getAll(keys);
+    var fullStr = '';
+    for (var j = 0; j < numChunks; j++) {
+      var chunkData = chunks[key + '_' + j];
+      if (!chunkData) return null; // 遺失任何一個 chunk 就當作失效
+      fullStr += chunkData;
+    }
+    return fullStr;
+  }
+}
+
+function removeCachedData(key) {
+  var cache = CacheService.getScriptCache();
+  var numChunksStr = cache.get(key + '_chunks');
+  var keysToRemove = [key, key + '_chunks'];
+  
+  if (numChunksStr) {
+    var numChunks = parseInt(numChunksStr, 10);
+    for (var i = 0; i < numChunks; i++) {
+      keysToRemove.push(key + '_' + i);
+    }
+  }
+  // 為保險起見，也把可能產生的前 10 個 chunk 都刪除，防止舊有結構殘留
+  for (var k = 0; k < 10; k++) {
+      keysToRemove.push(key + '_' + k);
+  }
+  cache.removeAll(keysToRemove);
 }

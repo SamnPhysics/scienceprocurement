@@ -174,19 +174,19 @@
           </div>
           <ul class="space-y-2" id="sidebar-list">
             <li>
-              <button onclick="switchApplyForm('equipBorrow')" id="btn-apply-equipBorrow"
+              <button onclick="switchApplyForm('lab')" id="btn-apply-lab"
                 class="w-full text-left px-3 py-2 rounded-md bg-blue-50 text-blue-700 font-semibold transition flex items-center"
-                title="1.教學及實驗設備借用">
-                <i class="fa-solid fa-box-open w-6 text-center text-lg"></i>
-                <span class="sidebar-text ml-2 whitespace-nowrap overflow-hidden transition-opacity">1.教學及實驗設備借用</span>
+                title="1.自然科實驗室預約">
+                <i class="fa-solid fa-door-open w-6 text-center text-lg"></i>
+                <span class="sidebar-text ml-2 whitespace-nowrap overflow-hidden transition-opacity">1.自然科實驗室預約</span>
               </button>
             </li>
             <li>
-              <button onclick="switchApplyForm('lab')" id="btn-apply-lab"
+              <button onclick="switchApplyForm('equipBorrow')" id="btn-apply-equipBorrow"
                 class="w-full text-left px-3 py-2 rounded-md text-slate-600 hover:bg-slate-50 transition flex items-center"
-                title="2.自然科實驗室預約">
-                <i class="fa-solid fa-door-open w-6 text-center text-lg"></i>
-                <span class="sidebar-text ml-2 whitespace-nowrap overflow-hidden transition-opacity">2.自然科實驗室預約</span>
+                title="2.教學及實驗設備借用">
+                <i class="fa-solid fa-box-open w-6 text-center text-lg"></i>
+                <span class="sidebar-text ml-2 whitespace-nowrap overflow-hidden transition-opacity">2.教學及實驗設備借用</span>
               </button>
             </li>
             <li>
@@ -233,7 +233,7 @@
           </div>
 
           <!-- 2. 實驗室借用/使用 -->
-          <div id="tab-container-lab" class="hidden">
+          <div id="tab-container-lab" class="block">
             <?!= include('IndexTab-lab'); ?>
           </div>
 
@@ -243,7 +243,7 @@
           </div>
 
           <!-- 3.5 教學實驗設備借用 -->
-          <div id="tab-container-equipBorrow" class="block">
+          <div id="tab-container-equipBorrow" class="hidden">
             <?!= include('IndexTab-equipBorrow'); ?>
           </div>
 
