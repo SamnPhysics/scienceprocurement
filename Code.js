@@ -512,7 +512,7 @@ function submitApplication(formData, token) {
         '時間戳記': new Date(),
         '物品/藥品中文名稱': formData.chineseName,
         '藥品英文名稱(含化學式，分子量)或物品名稱': formData.englishName,
-        '所需數量': formData.quantity,
+        '所需數量': formData.quantity + (formData.unit ? ' ' + formData.unit : ''),
         '物品分類/化學藥品狀態': formData.category,
         '藥品濃度(液態)': formData.concentration || '無',
         '課程使用時間': formData.usageTime,
@@ -542,7 +542,7 @@ function submitApplication(formData, token) {
         "科別：" + formData.subject + "\n" +
         "中文名稱：" + formData.chineseName + "\n" +
         "英文名稱：" + formData.englishName + "\n" +
-        "數量：" + formData.quantity + "\n" +
+        "數量：" + formData.quantity + (formData.unit ? ' ' + formData.unit : '') + "\n" +
         "使用時間：" + formData.usageTime + "\n" +
         "備註：" + (formData.remark || '無') + "\n\n" +
         "請登入系統管理者後台查看詳細內容並進行審核： " + ADMIN_BACKEND_URL;
@@ -552,7 +552,7 @@ function submitApplication(formData, token) {
         "<b>科別：</b>" + formData.subject + "<br>" +
         "<b>中文名稱：</b>" + formData.chineseName + "<br>" +
         "<b>英文名稱：</b>" + formData.englishName + "<br>" +
-        "<b>數量：</b>" + formData.quantity + "<br>" +
+        "<b>數量：</b>" + formData.quantity + (formData.unit ? ' ' + formData.unit : '') + "<br>" +
         "<b>使用時間：</b>" + formData.usageTime + "<br>" +
         "<b>備註：</b>" + (formData.remark || '無') + "<br><br>" +
         "請 <a href='" + ADMIN_BACKEND_URL + "'>登入系統管理者後台</a> 查看詳細內容並進行審核。";
