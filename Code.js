@@ -116,17 +116,17 @@ function validateLength(value, max, fieldName) {
 function sanitizeHtml(str) {
   if (typeof str !== 'string') return str;
   return str.replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#x27;');
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
 }
 
 function sanitizeFormData(obj) {
   if (obj === null || typeof obj !== 'object') return obj;
-  
+
   if (Array.isArray(obj)) {
-    return obj.map(function(item) { return sanitizeFormData(item); });
+    return obj.map(function (item) { return sanitizeFormData(item); });
   }
 
   var sanitizedObj = {};
@@ -272,7 +272,7 @@ function processOAuthCallback(code) {
     var displayName = profile.name || email.split('@')[0];
     var role = 'guest';
     var message = '';
-    
+
     if (!ALLOWED_DOMAIN || ALLOWED_DOMAIN === '請設定 ALLOWED_DOMAIN') {
       role = 'invalid';
       message = '系統尚未設定允許登入的組織網域 (ALLOWED_DOMAIN)';
@@ -332,8 +332,8 @@ function processOAuthCallback(code) {
       + 'try{if(window.opener&&!window.opener.closed){window.opener.postMessage({type:"gas_oauth_token",token:tk,authStatus:authStatus},"*");}}catch(e1){}'
       + 'try{if(window.parent!==window){window.parent.postMessage({type:"gas_oauth_token",token:tk,authStatus:authStatus},"*");}}catch(e2){}'
       + 'var btn=document.getElementById("go");'
-      + 'if(btn){btn.onclick=function(e){try{localStorage.setItem("gas_auth_result",JSON.stringify({token:tk,authStatus:authStatus,ts:Date.now()}));}catch(ls){} if(window.opener && window.opener !== window){ e.preventDefault(); try{window.close();}catch(x){} } };}'
-      + 'setTimeout(function(){try{ if(window.opener && window.opener !== window){ window.close(); } else { window.location.replace("' + redirectUrl + '"); } }catch(x){}},400);'
+      + 'if(btn){btn.href="#";btn.onclick=function(e){e.preventDefault();try{localStorage.setItem("gas_auth_result",JSON.stringify({token:tk,ts:Date.now()}));}catch(ls){}try{window.close();}catch(x){btn.textContent="\u767b\u5165\u5b8c\u6210\uff01\u8acb\u624b\u52d5\u95dc\u9589\u6b64\u8996\u7a97";btn.style.background="#6b7280";}};}'
+      + 'setTimeout(function(){try{window.close();}catch(x){}},1800);'
       + '}'
       + 'if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",send);}else{send();}'
       + '})();<\/script>'
@@ -371,7 +371,7 @@ function getAuthStatus(token) {
     if (!ALLOWED_DOMAIN || ALLOWED_DOMAIN === '請設定 ALLOWED_DOMAIN') {
       return { loggedIn: true, email: email, displayName: displayName, role: "invalid", message: "系統尚未設定允許登入的組織網域 (ALLOWED_DOMAIN)" };
     }
-    
+
     if (!email.toLowerCase().endsWith('@' + ALLOWED_DOMAIN.toLowerCase().trim())) {
       return { loggedIn: true, email: email, displayName: displayName, role: "invalid", message: "非允許登入的組織網域，僅限 @" + ALLOWED_DOMAIN + " 帳號使用" };
     }
@@ -965,9 +965,9 @@ function getSystemSheet_(system) {
 function batchDeleteRows_(sheet, rowNumbers) {
   if (!rowNumbers || rowNumbers.length === 0) return;
   // 去重複並由大到小排序 (由下往上刪除才不會影響未處理的列號)
-  var uniqueRows = rowNumbers.filter(function(item, pos) {
+  var uniqueRows = rowNumbers.filter(function (item, pos) {
     return rowNumbers.indexOf(item) === pos;
-  }).sort(function(a, b) { return b - a; });
+  }).sort(function (a, b) { return b - a; });
 
   // 放棄使用 sheet.deleteRows(start, count)，改用逐列刪除確保 100% 成功率與穩定性
   for (var i = 0; i < uniqueRows.length; i++) {
@@ -1487,7 +1487,7 @@ function cancelLabBooking(rowNumber, token, cancelSeries) {
     var groupId = String(row[14] || '').trim();
     // 確保 cancelSeries 變數能正確被判定為 true (防範字串傳遞)
     var isCancelSeries = (cancelSeries === true || String(cancelSeries) === 'true');
-    
+
     if (isCancelSeries && groupId) {
       // 找出同 groupId 的所有列 (從後面刪除以避免列號偏移)
       var rowsToDelete = [];
@@ -1501,7 +1501,7 @@ function cancelLabBooking(rowNumber, token, cancelSeries) {
           }
         }
       }
-      
+
       if (rowsToDelete.length > 0) {
         batchDeleteRows_(sheet, rowsToDelete);
       } else {
@@ -1511,7 +1511,7 @@ function cancelLabBooking(rowNumber, token, cancelSeries) {
     } else {
       sheet.deleteRow(rowNumber);
     }
-    
+
     // 清除快取，讓下次讀取能抓到最新資料 (解決前端重新整理仍看到舊資料的問題)
     CacheService.getScriptCache().remove('sheet_data_cache_v2_lab');
     return { success: true };

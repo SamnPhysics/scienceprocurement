@@ -25,12 +25,12 @@ GAS 官方規定：若將部署設定為**「執行身分：我 (開發者)」**
 graph TD
     Client[🖥️ 前端網頁介面 SPA<br>Index.html + Tailwind CSS]
     
-    subgraph Google Apps Script 後端 (Code.js)
+    subgraph GAS_Backend ["Google Apps Script 後端 (Code.js)"]
         GAS[⚙️ API 路由與核心邏輯<br>doGet / processOAuthCallback]
         Cache[(💾 CacheService<br>暫存 Session Token 30分鐘)]
     end
     
-    subgraph Google 雲端服務群
+    subgraph Google_Cloud ["Google 雲端服務群"]
         OAuth[🔑 Google OAuth 2.0<br>GCP 授權中心]
         Sheets[(📊 Google 試算表資料庫<br>四大子系統獨立 Sheet)]
         Drive[(📁 Google 雲端硬碟<br>圖片儲存與縮圖快取)]
