@@ -14,7 +14,7 @@
    * @param {boolean} [force=false] - 是否強制重新載入，忽略已載入 (isSettingsLoaded) 的狀態
    * @returns {Promise<void>}
    */
-  async function loadSystemSettings(force = false) {
+  async function loadSystemSettings(force = false, silent = false) {
     if (isSettingsLoaded && !force) return;
 
     const btnBase = document.getElementById('btn-save-base-settings');
@@ -40,12 +40,12 @@
           }
         }
       } else {
-        alert('載入設定失敗：' + (response.message || '未知錯誤'));
+        if (!silent) alert('載入設定失敗：' + (response.message || '未知錯誤'));
       }
     } catch (err) {
       if (btnBase) { btnBase.innerText = '儲存基礎設定'; btnBase.disabled = false; }
       if (btnAdv) { btnAdv.innerText = '儲存進階參數'; btnAdv.disabled = false; }
-      alert('連線失敗：' + (err.message || err));
+      if (!silent) alert('連線失敗：' + (err.message || err));
     }
   }
 

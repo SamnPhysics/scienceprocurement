@@ -258,7 +258,7 @@
         { header: '申請科別', thClass: 'p-3', render: (item) => UIBuilder.buildTd(`<span class="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700 whitespace-nowrap">${item.subject || ''}</span>`) },
         { header: '設備名稱/軟體名稱', thClass: 'p-3', render: (item) => UIBuilder.buildTd(`<span class="font-medium text-slate-900">${item.chineseName || ''}</span>`) },
         { header: '數量', thClass: 'p-3 w-16 text-center', render: (item) => UIBuilder.buildTd(`<span class="font-semibold text-slate-800">${item.quantity || ''}</span>`, "p-3 text-center") },
-        { header: '自估單價', thClass: 'p-3 text-center w-28', render: (item) => UIBuilder.buildTd(`<span class="text-rose-600 font-medium">${item.price ? item.price + ' 元' : '無'}</span>`, "p-3 text-center") },
+        { header: '採購總價', thClass: 'p-3 text-center w-28', render: (item) => UIBuilder.buildTd(`<span class="text-rose-600 font-medium">${item.totalPrice ? item.totalPrice + ' 元' : '無'}</span>`, "p-3 text-center") },
         { header: '是否購入', thClass: 'p-3 text-center', render: (item) => UIBuilder.buildTd(UIBuilder.getStatusBadge(item.status), "p-3 text-center") }
       ],
       'admin': [
@@ -269,7 +269,7 @@
         { header: '數量', thClass: 'p-3 w-16 text-center', render: (item) => UIBuilder.buildTd(`<span class="font-semibold text-slate-800 min-w-[80px]">${item.quantity || ''}</span>`, "p-3 text-center") },
         { header: '申請人', thClass: 'p-3', render: (item) => UIBuilder.buildTd(`<span class="text-xs whitespace-nowrap">${item.applicant || ''}</span>`) },
         { header: '是否購入', thClass: 'p-3 text-center', render: (item) => UIBuilder.buildStatusSelectTd('equip', item.status, item.rowNumber) },
-        { header: '自估單價', thClass: 'p-3 text-center w-28', render: (item) => UIBuilder.buildPriceInputTd(item.rowNumber, item.price, '元') },
+        { header: '採購總價', thClass: 'p-3 text-center w-28', render: (item) => UIBuilder.buildPriceInputTd(item.rowNumber, item.totalPrice, '元') },
         { header: '操作', thClass: 'p-3 text-center', render: (item) => UIBuilder.buildActionBtnTd(item.rowNumber) }
       ]
     },

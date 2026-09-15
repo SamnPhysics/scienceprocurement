@@ -109,8 +109,8 @@
     if (btnBatchUpdate) { btnBatchUpdate.classList.add('hidden'); btnBatchUpdate.classList.remove('flex'); }
 
     datalistManager.config.calculateSum = (system !== 'equipBorrow');
-    datalistManager.config.sumField = (system === 'equip') ? 'price' : 'totalPrice';
-    datalistManager.config.sumTitle = (system === 'equip') ? '本頁自估單價加總：' : '本頁採購總價加總：';
+    datalistManager.config.sumField = 'totalPrice';
+    datalistManager.config.sumTitle = '本頁採購總價加總：';
     datalistManager.config.applicantFilterId = null;
 
     _setupDatalistHeaderAndRow(system, 'user-list', theadEl);

@@ -29,10 +29,11 @@
       const left = (screen.width - w) / 2;
       const top = (screen.height - h) / 2;
       this.popup = window.open(loginUrl, 'gas_oauth_popup', `width=${w},height=${h},top=${top},left=${left},scrollbars=yes,resizable=yes`);
-      if (!this.popup || this.popup.closed) {
-        alert('無法開啟登入視窗，請確認您的瀏覽器未封鎖彈出式視窗（popup），然後再試一次。');
+      if (!this.popup || this.popup.closed || typeof this.popup.closed === 'undefined') {
+        // 若瀏覽器封鎖彈窗或為 LINE 內建瀏覽器，直接在當前頁面跳轉
         const btn = document.getElementById('btn-login-logout');
-        if (btn) btn.innerText = '登入';
+        if (btn) btn.innerText = '跳轉中...';
+        window.location.href = loginUrl;
         return;
       }
 
@@ -53,12 +54,18 @@
      * 接收到 Token 後，結束登入流程並將 Token 寫入 localStorage
      * @param {string} token - 後端配發的驗證 Token
      */
-    finishLogin: function (token) {
+    finishLogin: function (token, initialStatus) {
       this.cleanup();
       localStorage.setItem('my_app_token', token);
       localStorage.removeItem('gas_auth_result');
       try { if (this.popup && !this.popup.closed) this.popup.close(); } catch (x) { }
-      checkAuthStatus();
+      
+      if (initialStatus) {
+        localStorage.setItem('cached_auth_status', JSON.stringify(initialStatus));
+        if (typeof setupUI === 'function') setupUI(initialStatus);
+      } else {
+        checkAuthStatus();
+      }
     },
 
     /**
@@ -69,7 +76,7 @@
       if (e.key === 'gas_auth_result' && e.newValue) {
         try {
           const d = JSON.parse(e.newValue);
-          if (d && d.token) LoginManager.finishLogin(d.token);
+          if (d && d.token) LoginManager.finishLogin(d.token, d.authStatus);
         } catch (pe) { }
       }
     },
@@ -80,7 +87,7 @@
      */
     msgHandler: function (event) {
       if (event.data && event.data.type === 'gas_oauth_token') {
-        LoginManager.finishLogin(event.data.token);
+        LoginManager.finishLogin(event.data.token, event.data.authStatus);
       }
     },
 
@@ -127,7 +134,6 @@
       await ApiService.auth.logout(getToken());
       
       const isPublic = localStorage.getItem('isPublicComputer') === 'true';
-<<<<<<< HEAD
       
       if (isPublic) {
         localStorage.clear();
@@ -141,11 +147,6 @@
         if (userAgreed) {
           window.open('https://accounts.google.com/Logout', '_blank');
         }
-=======
-      if (isPublic) {
-        localStorage.clear();
-        window.location.href = 'https://accounts.google.com/Logout';
->>>>>>> 65712019ce033def74139f2e9c55f85491b71079
         return;
       }
 
