@@ -39,9 +39,9 @@ graph TD
 
     Client -- 1. 點擊登入 (開啟彈窗) --> OAuth
     OAuth -- 2. 使用者同意授權後回傳 code --> GAS
-    GAS -- 3. 以 code 交換 Access Token & UserInfo --> OAuth
-    GAS -- 4. 產生 Session Token 並綁定個資 --> Cache
-    GAS -- 5. postMessage 傳遞 Token 至主視窗 --> Client
+    GAS -- 3. 以 code 交換 Token & 快速解析 JWT --> OAuth
+    GAS -- 4. 產生 Session Token 並計算身分狀態 --> Cache
+    GAS -- 5. postMessage 傳遞 Token 與狀態至主視窗 --> Client
     
     Client -- 6. 攜帶 Session Token 呼叫 API --> GAS
     GAS -- 讀寫 4 大子系統資料 --> Sheets
@@ -62,24 +62,20 @@ sequenceDiagram
     participant GAS as ⚙️ 後端 API (Code.js)
     participant C as 💾 快取 (CacheService)
 
-    U->>P: 點擊「登入」開啟授權彈出視窗 (js-auth.html)
-    P->>G: 導向 Google 登入與授權頁面 (getLoginUrl)
+    U->>P: 點擊「登入」開啟授權彈出視窗 (使用全域 loginUrl)
+    P->>G: 導向 Google 登入與授權頁面 (prompt=select_account)
     G-->>U: 顯示 Google 帳號選擇與授權確認畫面
     U->>G: 選擇學校網域帳號 (@your-school.edu.tw) 並同意授權
     G-->>P: 重定向回 Web App URL 並附帶授權碼 (?code=XYZ)
     P->>GAS: GET /exec?code=XYZ (觸發 doGet -> processOAuthCallback)
-    GAS->>G: 後端使用 Client Secret + code 交換 Access Token
-    G-->>GAS: 回傳 Access Token 與 Profile (Email、姓名、大頭貼)
+    GAS->>G: 後端使用 Client Secret + code 交換 Access Token 與 ID Token (JWT)
+    G-->>GAS: 回傳 Token JSON
+    GAS->>GAS: 解析 ID Token 取出 Email、姓名，並計算身分與權限狀態
     GAS->>C: 產生 UUID Session Token，將個資寫入快取 (有效時間 1800 秒)
     GAS-->>P: 回傳成功頁面，執行 postMessage 與 localStorage 廣播
-    P-->>U: postMessage({ type: 'gas_oauth_token', token: '...' })
-    Note over P: 彈出視窗於 1.8 秒後自動關閉
-    U->>U: 主頁面收到 Token 存入 localStorage('my_app_token')
-    U->>GAS: 呼叫 getAuthStatus(token) 初始化身分與權限
-    GAS->>C: 驗證 Token 是否有效並讀取使用者個資
-    C-->>GAS: 回傳 Profile
-    GAS-->>U: 回傳角色狀態 (admin / user / student / invalid)
-    U->>U: 前端自動切換登入介面、預填表單資訊與載入後台按鈕
+    P-->>U: postMessage({ type: 'gas_oauth_token', token: '...', authStatus: {...} })
+    Note over P: 彈出視窗於 0.4 秒後自動關閉
+    U->>U: 主頁面收到 Token 與 authStatus，瞬間自動切換登入介面
 ```
 
 ---

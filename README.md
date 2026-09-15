@@ -15,8 +15,9 @@
 - **半開放式安全存取 (SPA)**：首頁與實驗室課表開放全校瀏覽（預約姓名具備隱私遮蔽）；使用者需登入學校網域帳號後方可填寫申請或檢視歷史紀錄。
 - **自建 Google OAuth2 授權安全架構**：
   - 突破 GAS「執行身分：我 (開發者)」無法透過 `Session.getActiveUser()` 獲取使用者 Email 的限制。
-  - 透過彈出視窗 (Popup) 進行 Google OAuth 2.0 授權，完成後以 `postMessage` 傳回亂碼通行證 (Session Token)。
-  - 後端 `CacheService` 綁定使用者身分（時效 30 分鐘，兼顧公用電腦安全性），每次 API 呼叫皆進行嚴格身分與網域檢驗。
+  - 透過彈出視窗 (Popup) 進行 Google OAuth 2.0 授權，透過直接解析 ID Token (JWT) 達到極速認證。
+  - 完成後以 `postMessage` 同步傳回亂碼通行證 (Session Token) 與身分狀態，實現前端瞬間登入無延遲 (Optimistic UI)。
+  - 後端 `CacheService` 綁定使用者身分（時效 30 分鐘，結合原生登入帳號切換，兼顧公用電腦安全性），每次 API 呼叫皆進行嚴格身分與網域檢驗。
 - **多層級身分權限控制 (Role-Based Access Control)**：
   - 👤 **訪客 (Guest)**：未登入時可查看實驗室課表（顯示隱私遮蔽姓名如「趙O軒」）與申請規則說明，無法送出表單。
   - 🎓 **學生帳號 (Student)**：系統自動偵測 6 位數學生學號帳號，僅開放「教學實驗設備借用」與「實驗室預約」，限制請購與採購權限。
