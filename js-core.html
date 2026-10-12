@@ -140,7 +140,8 @@
       submitEquip: (data, token) => window.callGas('submitEquipApplication', data, token),
       submitEquipBorrow: (data, token) => window.callGas('submitEquipBorrowApplication', data, token),
       batchSubmitChem: (data, token) => window.callGas('batchSubmitApplication', data, token),
-      uploadChemImage: (base64, name, token) => window.callGas('uploadChemImportImage', base64, name, token)
+      uploadChemImage: (base64, name, token) => window.callGas('uploadChemImportImage', base64, name, token),
+      uploadChemImagesBatch: (items, token) => window.callGas('uploadChemImportImagesBatch', items, token)
     },
     admin: {
       updateStatus: (row, status, price, token, sys) => window.callGas('updateProcurementStatus', row, status, price, token, sys),

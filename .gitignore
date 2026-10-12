@@ -1,0 +1,5 @@
+# 忽略 clasp 的專案設定檔
+.clasp.json
+
+# 如果你把登入憑證錯放在專案目錄下，也務必忽略
+.clasprc.json

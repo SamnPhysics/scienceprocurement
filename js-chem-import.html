@@ -315,20 +315,26 @@
       card.classList.toggle('cr-card-bad', showErrors && msgs.length > 0);
     }
 
-    function refreshAll(showErrors) {
+    function updateStats() {
       var bad = 0, photos = 0;
-      rows.forEach(function (row) {
-        var errs = validateData(row.data);
-        if (Object.keys(errs).length) bad++;
-        if (row.photo) photos++;
-        applyRowUi(row, errs, showErrors !== false && row.touched !== false && (showErrors === true || row.touched === true));
-        refreshPhotoView(row);
+      rows.forEach(function (r) {
+        if (Object.keys(validateData(r.data)).length) bad++;
+        if (r.photo) photos++;
       });
       els.statTotal.textContent = '共 ' + rows.length + ' 筆';
       els.statBad.textContent = bad ? (bad + ' 筆待修正') : '無錯誤';
       els.statBad.className = 'cr-chip ' + (bad ? 'cr-chip-bad' : 'cr-chip-ok');
       els.statPhoto.textContent = '照片 ' + photos;
       els.btnSubmit.disabled = busy || rows.length === 0;
+    }
+
+    function refreshAll(showErrors) {
+      rows.forEach(function (row) {
+        var errs = validateData(row.data);
+        applyRowUi(row, errs, showErrors !== false && row.touched !== false && (showErrors === true || row.touched === true));
+        refreshPhotoView(row);
+      });
+      updateStats();
     }
 
     // ---------- 圖片指派 ----------
@@ -343,6 +349,7 @@
       row.photo = { name: file.name || '貼上的圖片.png', status: 'processing', size: file.size, origSize: file.size, compressed: false, previewUrl: URL.createObjectURL(file) };
       var token = row.photo;
       refreshPhotoView(row);
+      updateStats();
       processImage(file).then(function (res) {
         if (row.photo !== token) return; // 已被替換或移除
         token.dataUrl = res.dataUrl;
@@ -352,11 +359,13 @@
         token.compressed = res.compressed;
         token.status = 'ready';
         token.photoUrl = '';
-        refreshAll();
+        refreshPhotoView(row);
+        updateStats();
       }).catch(function (err) {
         if (row.photo !== token) return;
         releasePhoto(row);
-        refreshAll();
+        refreshPhotoView(row);
+        updateStats();
         alert('圖片處理失敗：' + (err && err.message ? err.message : err));
       });
     }
@@ -390,29 +399,43 @@
       if (f) f.value = val;
     }
 
-    function updateStats() {
-      var bad = 0;
-      rows.forEach(function (r) { if (Object.keys(validateData(r.data)).length) bad++; });
-      els.statBad.textContent = bad ? (bad + ' 筆待修正') : '無錯誤';
-      els.statBad.className = 'cr-chip ' + (bad ? 'cr-chip-bad' : 'cr-chip-ok');
+    function setActiveCard(row) {
+      activeCard = row;
+      rows.forEach(function (r) { if (r.el) r.el.classList.toggle('cr-card-active', r === row); });
     }
 
     function onClick(e) {
-      var act = e.target.closest ? e.target.closest('[data-act]') : null;
       var row = rowOfElement(e.target);
+      if (row) {
+        setActiveCard(row);
+      }
+      var act = e.target.closest ? e.target.closest('[data-act]') : null;
       if (act && row) {
         e.stopPropagation();
         var a = act.getAttribute('data-act');
         if (a === 'delete') {
           if (busy) return;
+          var idx = rows.indexOf(row);
           releasePhoto(row);
-          rows.splice(rows.indexOf(row), 1);
+          rows.splice(idx, 1);
           if (row.el && row.el.parentNode) row.el.parentNode.removeChild(row.el);
-          if (rows.length === 0) renderAll(); else refreshAll();
+          if (rows.length === 0) {
+            renderAll();
+          } else {
+            // 局部更新：僅更新刪除項目之後的卡片標題序號「第 X 筆」
+            for (var k = idx; k < rows.length; k++) {
+              if (rows[k].el) {
+                var idxEl = rows[k].el.querySelector('.cr-index');
+                if (idxEl) idxEl.textContent = '第 ' + (k + 1) + ' 筆';
+              }
+            }
+            updateStats();
+          }
         } else if (a === 'remove-photo') {
           if (busy) return;
           releasePhoto(row);
-          refreshAll();
+          refreshPhotoView(row);
+          updateStats();
         }
         return;
       }
@@ -471,8 +494,7 @@
     function onFocusIn(e) {
       var row = rowOfElement(e.target);
       if (row) {
-        activeCard = row;
-        rows.forEach(function (r) { if (r.el) r.el.classList.toggle('cr-card-active', r === row); });
+        setActiveCard(row);
       }
     }
 
@@ -495,39 +517,95 @@
       els.body.querySelectorAll('input,select,textarea,button').forEach(function (n) { n.disabled = v; });
     }
 
-    function uploadOne(row) {
-      var p = row.photo;
-      p.status = 'uploading';
-      refreshPhotoView(row);
-      return ApiService.form.uploadChemImage(p.dataUrl, p.name, getToken()).then(function (res) {
-        if (res && res.success && res.photoUrl) {
-          p.photoUrl = res.photoUrl;
-          p.status = 'uploaded';
-        } else {
-          p.status = 'failed';
-          p.error = (res && res.message) || '未知錯誤';
+    // 小批次上傳多個 row 的圖片 (Micro-Batching: 每批最多 3 張圖片)
+    var BATCH_CHUNK_SIZE = 3;
+
+    function uploadBatchChunk(chunkRows) {
+      var payloadItems = [];
+      for (var i = 0; i < chunkRows.length; i++) {
+        var r = chunkRows[i];
+        var p = r.photo;
+        p.status = 'uploading';
+        refreshPhotoView(r);
+        payloadItems.push({
+          id: r.id,
+          dataUrl: p.dataUrl,
+          name: p.name
+        });
+      }
+
+      var caller = ApiService.form.uploadChemImagesBatch ?
+        ApiService.form.uploadChemImagesBatch(payloadItems, getToken()) :
+        Promise.all(chunkRows.map(function (cr) {
+          return ApiService.form.uploadChemImage(cr.photo.dataUrl, cr.photo.name, getToken()).then(function (res) {
+            return { id: cr.id, success: !!(res && res.success), photoUrl: (res && res.photoUrl) || '', message: (res && res.message) || '' };
+          });
+        })).then(function (arr) { return { success: true, results: arr }; });
+
+      return caller.then(function (res) {
+        var resultsMap = {};
+        if (res && res.success && Array.isArray(res.results)) {
+          res.results.forEach(function (item) { resultsMap[item.id] = item; });
         }
+        chunkRows.forEach(function (r) {
+          var p = r.photo;
+          var resItem = resultsMap[r.id];
+          if (resItem && resItem.success && resItem.photoUrl) {
+            p.photoUrl = resItem.photoUrl;
+            p.status = 'uploaded';
+            p.dataUrl = null; // 【效能優化 2】：上傳成功立即釋放 Base64 記憶體佔用
+          } else {
+            p.status = 'failed';
+            p.error = (resItem && resItem.message) || (res && res.message) || '上傳失敗';
+          }
+          refreshPhotoView(r);
+        });
       }).catch(function (err) {
-        p.status = 'failed';
-        p.error = (err && err.message) || String(err);
-      }).then(function () { refreshPhotoView(row); });
+        chunkRows.forEach(function (r) {
+          r.photo.status = 'failed';
+          r.photo.error = (err && err.message) || String(err);
+          refreshPhotoView(r);
+        });
+      });
     }
 
     function uploadAll(list, onStep) {
       return new Promise(function (resolve) {
-        var idx = 0, done = 0;
         if (list.length === 0) { resolve(); return; }
-        function next() {
-          if (idx >= list.length) return;
-          var row = list[idx++];
-          uploadOne(row).then(function () {
-            done++;
-            onStep(done);
-            if (done === list.length) resolve(); else next();
-          });
+
+        // 將待上傳清單依照 BATCH_CHUNK_SIZE 分組
+        var chunks = [];
+        for (var i = 0; i < list.length; i += BATCH_CHUNK_SIZE) {
+          chunks.push(list.slice(i, i + BATCH_CHUNK_SIZE));
         }
-        var n = Math.min(UPLOAD_CONCURRENCY, list.length);
-        for (var i = 0; i < n; i++) next();
+
+        var doneCount = 0;
+        var chunkIdx = 0;
+
+        function runNextChunk() {
+          if (chunkIdx >= chunks.length) {
+            resolve();
+            return;
+          }
+          var currentChunk = chunks[chunkIdx++];
+          try {
+            uploadBatchChunk(currentChunk).then(function () {
+              doneCount += currentChunk.length;
+              onStep(Math.min(doneCount, list.length));
+              runNextChunk();
+            }).catch(function () {
+              doneCount += currentChunk.length;
+              onStep(Math.min(doneCount, list.length));
+              runNextChunk();
+            });
+          } catch (syncErr) {
+            doneCount += currentChunk.length;
+            onStep(Math.min(doneCount, list.length));
+            runNextChunk();
+          }
+        }
+
+        runNextChunk();
       });
     }
 

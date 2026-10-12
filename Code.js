@@ -431,7 +431,27 @@ function extractDriveFileId_(url) {
   return m ? m[1] : '';
 }
 
-// 供前端核查頁「逐張」上傳已壓縮的圖片，回傳 Drive 網址
+// 內部處理單一圖片儲存與驗證
+function processSingleChemImportImage_(base64Str, fileName, email) {
+  if (!base64Str || typeof base64Str !== 'string') {
+    return { success: false, message: '沒有圖片資料。' };
+  }
+  var mimeMatch = base64Str.match(/^data:(image\/(?:jpeg|png|webp));base64,/);
+  if (!mimeMatch) {
+    return { success: false, message: '僅支援 JPEG / PNG / WebP 圖片格式。' };
+  }
+  if (base64Str.length * 0.75 > CHEM_IMPORT_MAX_IMAGE_BYTES_) {
+    return { success: false, message: '圖片過大，請重新選擇。' };
+  }
+  var safeName = String(fileName || 'import.jpg').replace(/[^\w.\-\u4e00-\u9fa5]/g, '_').substring(0, 80);
+  var url = saveBase64ImageToDrive_(base64Str, safeName);
+  var fileId = extractDriveFileId_(url);
+  if (!fileId) return { success: false, message: '無法取得檔案資訊。' };
+  CacheService.getScriptCache().put('chem_up_' + fileId, email.toLowerCase(), 21600);
+  return { success: true, photoUrl: url };
+}
+
+// 供前端核查頁「單張」上傳已壓縮的圖片
 function uploadChemImportImage(base64Str, fileName, token) {
   try {
     var profile = verifySessionToken(token);
@@ -442,26 +462,51 @@ function uploadChemImportImage(base64Str, fileName, token) {
     if (isStudentAccount(email)) {
       return { success: false, message: '上傳失敗：學生帳號無權限使用此功能！' };
     }
-    if (!base64Str || typeof base64Str !== 'string') {
-      return { success: false, message: '上傳失敗：沒有圖片資料。' };
-    }
-    var mimeMatch = base64Str.match(/^data:(image\/(?:jpeg|png|webp));base64,/);
-    if (!mimeMatch) {
-      return { success: false, message: '上傳失敗：僅支援 JPEG / PNG / WebP 圖片格式。' };
-    }
-    // base64 長度換算為約略位元組數
-    if (base64Str.length * 0.75 > CHEM_IMPORT_MAX_IMAGE_BYTES_) {
-      return { success: false, message: '上傳失敗：圖片過大，請重新選擇。' };
-    }
-    var safeName = String(fileName || 'import.jpg').replace(/[^\w.\-\u4e00-\u9fa5]/g, '_').substring(0, 80);
-    var url = saveBase64ImageToDrive_(base64Str, safeName);
-    var fileId = extractDriveFileId_(url);
-    if (!fileId) return { success: false, message: '上傳失敗：無法取得檔案資訊。' };
-    // 記錄「此帳號上傳的檔案」，批次寫入時據此驗證 photoUrl，避免被塞入任意網址
-    CacheService.getScriptCache().put('chem_up_' + fileId, email.toLowerCase(), 21600);
-    return { success: true, photoUrl: url };
+    var res = processSingleChemImportImage_(base64Str, fileName, email);
+    if (!res.success) return { success: false, message: '上傳失敗：' + res.message };
+    return { success: true, photoUrl: res.photoUrl };
   } catch (e) {
     return { success: false, message: '上傳失敗: ' + e.message };
+  }
+}
+
+// 供前端核查頁「分批小包（Micro-Batch）」上傳多張圖片，減少 RPC 往返次數
+function uploadChemImportImagesBatch(items, token) {
+  try {
+    var profile = verifySessionToken(token);
+    var email = profile.email;
+    if (!email || !email.toLowerCase().endsWith('@' + String(ALLOWED_DOMAIN).toLowerCase())) {
+      return { success: false, message: '上傳失敗：必須登入學校網域帳號。' };
+    }
+    if (isStudentAccount(email)) {
+      return { success: false, message: '上傳失敗：學生帳號無權限使用此功能！' };
+    }
+    if (!Array.isArray(items) || items.length === 0) {
+      return { success: false, message: '上傳失敗：項目清單為空。' };
+    }
+    var results = [];
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      try {
+        var res = processSingleChemImportImage_(it.dataUrl, it.name, email);
+        results.push({
+          id: it.id,
+          success: res.success,
+          photoUrl: res.photoUrl || '',
+          message: res.message || ''
+        });
+      } catch (err) {
+        results.push({
+          id: it.id,
+          success: false,
+          photoUrl: '',
+          message: err.message || String(err)
+        });
+      }
+    }
+    return { success: true, results: results };
+  } catch (e) {
+    return { success: false, message: '批次上傳失敗: ' + e.message };
   }
 }
 
@@ -591,23 +636,25 @@ function batchSubmitApplication(formDataArray, token) {
     }
 
     // 發送一封彙整 Email 通知管理者
-    try {
-      var lines = [];
-      for (var k = 0; k < formDataArray.length; k++) {
-        var it = formDataArray[k];
-        lines.push((k + 1) + '. ' + it.chineseName + '｜' + it.quantity + (it.unit ? ' ' + it.unit : '') + '｜' + it.subject + (it.photoUrl && it.photoUrl !== '無照片' ? '｜有照片' : ''));
+    if (ADMIN_EMAILS && ADMIN_EMAILS.length > 0) {
+      try {
+        var lines = [];
+        for (var k = 0; k < formDataArray.length; k++) {
+          var it = formDataArray[k];
+          lines.push((k + 1) + '. ' + it.chineseName + '｜' + it.quantity + (it.unit ? ' ' + it.unit : '') + '｜' + it.subject + (it.photoUrl && it.photoUrl !== '無照片' ? '｜有照片' : ''));
+        }
+        var bodyStr = '系統收到申請人 ' + applicant + ' 批次匯入的 ' + rowCount + ' 筆藥品/物品採購申請：\n\n' +
+          lines.join('\n') + '\n\n請登入系統管理者後台查看詳細內容並進行審核： ' + ADMIN_BACKEND_URL;
+        var htmlBodyStr = '系統收到申請人 <b>' + applicant + '</b> 批次匯入的 <b>' + rowCount + '</b> 筆藥品/物品採購申請：<br><br>' +
+          lines.join('<br>') + '<br><br>請 <a href=\'' + ADMIN_BACKEND_URL + '\'>登入系統管理者後台</a> 查看詳細內容並進行審核。';
+        MailApp.sendEmail(ADMIN_EMAILS.join(','), '【批次採購申請通知】' + applicant + ' 匯入 ' + rowCount + ' 筆', bodyStr, {
+          htmlBody: htmlBodyStr,
+          name: '自然科採購系統'
+        });
+      } catch (mailErr) {
+        console.log('Email發送失敗: ' + mailErr.toString());
+        return { success: true, message: '成功匯入 ' + rowCount + ' 筆請購資料！(但Email通知發送失敗：' + mailErr.toString() + ')' };
       }
-      var bodyStr = '系統收到申請人 ' + applicant + ' 批次匯入的 ' + rowCount + ' 筆藥品/物品採購申請：\n\n' +
-        lines.join('\n') + '\n\n請登入系統管理者後台查看詳細內容並進行審核： ' + ADMIN_BACKEND_URL;
-      var htmlBodyStr = '系統收到申請人 <b>' + applicant + '</b> 批次匯入的 <b>' + rowCount + '</b> 筆藥品/物品採購申請：<br><br>' +
-        lines.join('<br>') + '<br><br>請 <a href=\'' + ADMIN_BACKEND_URL + '\'>登入系統管理者後台</a> 查看詳細內容並進行審核。';
-      MailApp.sendEmail(ADMIN_EMAILS.join(','), '【批次採購申請通知】' + applicant + ' 匯入 ' + rowCount + ' 筆', bodyStr, {
-        htmlBody: htmlBodyStr,
-        name: '自然科採購系統'
-      });
-    } catch (mailErr) {
-      console.log('Email發送失敗: ' + mailErr.toString());
-      return { success: true, message: '成功匯入 ' + rowCount + ' 筆請購資料！(但Email通知發送失敗：' + mailErr.toString() + ')' };
     }
 
     return { success: true, message: '成功匯入 ' + rowCount + ' 筆請購資料！' };
