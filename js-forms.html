@@ -566,6 +566,13 @@
           return;
         }
 
+        // 匯入核查頁 (js-chem-import.html)：若已載入則交由核查頁處理，否則回退舊流程
+        if (window.ChemImportReview && typeof window.ChemImportReview.open === 'function') {
+          window.ChemImportReview.open(validForms);
+          event.target.value = '';
+          return;
+        }
+
         const isConfirmed = await showConfirm(`即將匯入 ${validForms.length} 筆請購資料，請確認是否繼續？`);
         if (isConfirmed) {
           // 呼叫後端批次寫入
@@ -574,6 +581,14 @@
           try {
             const response = await ApiService.form.batchSubmitChem(validForms, getToken());
             alert(response.message);
+            
+            // 批次上傳成功後，主動清除前端的資料快取並刷新列表
+            if (window.SystemCache) {
+              window.SystemCache.invalidate('user_chem');
+              window.SystemCache.invalidate('admin_chem');
+            }
+            if (typeof refreshDatalist === 'function') refreshDatalist();
+
             setSubmitButtonLoading(DOM.submitBtn, false, '送出請購');
             event.target.value = '';
           } catch (err) {

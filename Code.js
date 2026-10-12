@@ -116,17 +116,17 @@ function validateLength(value, max, fieldName) {
 function sanitizeHtml(str) {
   if (typeof str !== 'string') return str;
   return str.replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#x27;');
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
 }
 
 function sanitizeFormData(obj) {
   if (obj === null || typeof obj !== 'object') return obj;
-  
+
   if (Array.isArray(obj)) {
-    return obj.map(function(item) { return sanitizeFormData(item); });
+    return obj.map(function (item) { return sanitizeFormData(item); });
   }
 
   var sanitizedObj = {};
@@ -272,7 +272,7 @@ function processOAuthCallback(code) {
     var displayName = profile.name || email.split('@')[0];
     var role = 'guest';
     var message = '';
-    
+
     if (!ALLOWED_DOMAIN || ALLOWED_DOMAIN === '請設定 ALLOWED_DOMAIN') {
       role = 'invalid';
       message = '系統尚未設定允許登入的組織網域 (ALLOWED_DOMAIN)';
@@ -371,7 +371,7 @@ function getAuthStatus(token) {
     if (!ALLOWED_DOMAIN || ALLOWED_DOMAIN === '請設定 ALLOWED_DOMAIN') {
       return { loggedIn: true, email: email, displayName: displayName, role: "invalid", message: "系統尚未設定允許登入的組織網域 (ALLOWED_DOMAIN)" };
     }
-    
+
     if (!email.toLowerCase().endsWith('@' + ALLOWED_DOMAIN.toLowerCase().trim())) {
       return { loggedIn: true, email: email, displayName: displayName, role: "invalid", message: "非允許登入的組織網域，僅限 @" + ALLOWED_DOMAIN + " 帳號使用" };
     }
@@ -397,16 +397,84 @@ function getAuthStatus(token) {
 // 【ZONE 4】前台表單收件與寫入控制模組 (Application Form Submissions)
 // =====================================================================
 
+// --- 藥品/物品 批次匯入輔助常數與函式 ---
+var CHEM_IMPORT_SUBJECTS_ = ['物理', '化學', '生物', '地科', '自然學科探究實作課程', '自然學科四科專題課程'];
+var CHEM_IMPORT_CATEGORIES_ = ['固態藥品', '液態藥品', '肉類內臟', '蔬菜水果', '活體', '實驗器材'];
+var CHEM_IMPORT_MAX_IMAGE_BYTES_ = 1024 * 1024; // 前端已壓縮，後端上限 1MB
+
+// 將舊版/範本的分類文字對應為單筆表單使用的分類值
+function normalizeChemCategory_(cat) {
+  var c = String(cat || '').trim();
+  if (c.indexOf('固態') === 0) return '固態藥品';
+  if (c.indexOf('液態') === 0) return '液態藥品';
+  if (c.indexOf('活體') === 0) return '活體';
+  if (c.indexOf('實驗器材') === 0) return '實驗器材';
+  return c;
+}
+
+// 將「3 瓶」拆成數量與單位；若已為純數字則原樣回傳
+function splitChemQuantity_(fd) {
+  var qty = String(fd.quantity === undefined || fd.quantity === null ? '' : fd.quantity).trim();
+  var unit = String(fd.unit || '').trim();
+  var m = qty.match(/^(\d+(?:\.\d+)?)\s*(.*)$/);
+  if (m) {
+    qty = m[1];
+    if (!unit) unit = m[2].trim();
+  }
+  fd.quantity = qty;
+  fd.unit = unit;
+}
+
+// 從 Drive 網址取出檔案 ID
+function extractDriveFileId_(url) {
+  var m = String(url || '').match(/\/d\/([a-zA-Z0-9_-]+)/);
+  return m ? m[1] : '';
+}
+
+// 供前端核查頁「逐張」上傳已壓縮的圖片，回傳 Drive 網址
+function uploadChemImportImage(base64Str, fileName, token) {
+  try {
+    var profile = verifySessionToken(token);
+    var email = profile.email;
+    if (!email || !email.toLowerCase().endsWith('@' + String(ALLOWED_DOMAIN).toLowerCase())) {
+      return { success: false, message: '上傳失敗：必須登入學校網域帳號。' };
+    }
+    if (isStudentAccount(email)) {
+      return { success: false, message: '上傳失敗：學生帳號無權限使用此功能！' };
+    }
+    if (!base64Str || typeof base64Str !== 'string') {
+      return { success: false, message: '上傳失敗：沒有圖片資料。' };
+    }
+    var mimeMatch = base64Str.match(/^data:(image\/(?:jpeg|png|webp));base64,/);
+    if (!mimeMatch) {
+      return { success: false, message: '上傳失敗：僅支援 JPEG / PNG / WebP 圖片格式。' };
+    }
+    // base64 長度換算為約略位元組數
+    if (base64Str.length * 0.75 > CHEM_IMPORT_MAX_IMAGE_BYTES_) {
+      return { success: false, message: '上傳失敗：圖片過大，請重新選擇。' };
+    }
+    var safeName = String(fileName || 'import.jpg').replace(/[^\w.\-\u4e00-\u9fa5]/g, '_').substring(0, 80);
+    var url = saveBase64ImageToDrive_(base64Str, safeName);
+    var fileId = extractDriveFileId_(url);
+    if (!fileId) return { success: false, message: '上傳失敗：無法取得檔案資訊。' };
+    // 記錄「此帳號上傳的檔案」，批次寫入時據此驗證 photoUrl，避免被塞入任意網址
+    CacheService.getScriptCache().put('chem_up_' + fileId, email.toLowerCase(), 21600);
+    return { success: true, photoUrl: url };
+  } catch (e) {
+    return { success: false, message: '上傳失敗: ' + e.message };
+  }
+}
+
 // 處理藥品/物品 批次請購表單提交
 function batchSubmitApplication(formDataArray, token) {
   formDataArray = sanitizeFormData(formDataArray);
   try {
-    for (var i = 0; i < formDataArray.length; i++) {
-      validateChemFormData(formDataArray[i]);
+    if (!Array.isArray(formDataArray) || formDataArray.length === 0) {
+      return { success: false, message: '提交失敗：沒有可匯入的資料。' };
     }
     var profile = verifySessionToken(token);
     var email = profile.email;
-    if (!email || !email.toLowerCase().endsWith('@' + ALLOWED_DOMAIN)) {
+    if (!email || !email.toLowerCase().endsWith('@' + String(ALLOWED_DOMAIN).toLowerCase())) {
       return { success: false, message: '提交失敗：您必須登入學校網域帳號 (@' + ALLOWED_DOMAIN + ') 才能進行申請！' };
     }
 
@@ -414,52 +482,135 @@ function batchSubmitApplication(formDataArray, token) {
       return { success: false, message: '提交失敗：學生帳號無權限使用此功能！' };
     }
 
+    // 資料正規化與驗證（數量/單位拆分、分類對應、科別、液態必填）
+    for (var i = 0; i < formDataArray.length; i++) {
+      var f = formDataArray[i];
+      var label = '第 ' + (i + 1) + ' 筆「' + (f.chineseName || '') + '」：';
+      try {
+        splitChemQuantity_(f);
+        f.category = normalizeChemCategory_(f.category);
+        validateChemFormData(f);
+        validateLength(f.unit, 20, '單位');
+        if (CHEM_IMPORT_SUBJECTS_.indexOf(f.subject) === -1) {
+          throw new Error('「所需科別」不是有效的選項。');
+        }
+        if (f.category === '液態藥品') {
+          validateRequired(f.concentration, '藥品濃度(液態)');
+          validateRequired(f.volume, '藥品容量(液態)');
+        }
+      } catch (ve) {
+        return { success: false, message: '提交失敗：' + label + ve.message };
+      }
+    }
+
+    // 驗證圖片網址：必須是本次由同一帳號透過 uploadChemImportImage 上傳的檔案
+    var cache = CacheService.getScriptCache();
+    var idList = [];
+    var idByIndex = {};
+    for (var p = 0; p < formDataArray.length; p++) {
+      var pu = formDataArray[p].photoUrl;
+      if (pu && pu !== '無照片') {
+        var fid = extractDriveFileId_(pu);
+        if (!fid) return { success: false, message: '提交失敗：第 ' + (p + 1) + ' 筆圖片網址無效。' };
+        idList.push('chem_up_' + fid);
+        idByIndex[p] = fid;
+      }
+    }
+    if (idList.length > 0) {
+      var owners = cache.getAll(idList);
+      for (var q in idByIndex) {
+        var owner = owners['chem_up_' + idByIndex[q]];
+        if (!owner || owner !== email.toLowerCase()) {
+          return { success: false, message: '提交失敗：第 ' + (Number(q) + 1) + ' 筆圖片驗證失敗，請重新上傳該圖片。' };
+        }
+      }
+    }
+
     var applicant = (profile.name || email.split('@')[0] || '').toString();
 
     var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     var sheet = ss.getSheetByName(SHEET_NAME);
 
-    if (!sheet) {
-      sheet = ss.insertSheet(SHEET_NAME);
-      sheet.appendRow([
-        '時間戳記', '物品/藥品中文名稱', '藥品英文名稱(含化學式，分子量)或物品名稱',
-        '所需數量', '物品分類/化學藥品狀態', '藥品濃度(液態)',
-        '課程使用時間', '請勾選所需科別', '申請人', '電子郵件地址',
-        '物品/藥品照片', '藥品容量(液態)', '是否請購', '備註', '採購總價'
-      ]);
+    var lock = LockService.getScriptLock();
+    if (!lock.tryLock(15000)) {
+      return { success: false, message: '提交失敗：系統目前忙碌中，請稍後再試。' };
     }
 
-    var rowsToInsert = [];
-    var now = new Date();
-    var photoUrl = '無照片';
+    var rowCount = 0;
+    try {
+      if (!sheet) {
+        sheet = ss.insertSheet(SHEET_NAME);
+        sheet.appendRow([
+          '時間戳記', '物品/藥品中文名稱', '藥品英文名稱(含化學式，分子量)或物品名稱',
+          '所需數量', '物品分類/化學藥品狀態', '藥品濃度(液態)',
+          '課程使用時間', '請勾選所需科別', '申請人', '電子郵件地址',
+          '物品/藥品照片', '藥品容量(液態)', '是否請購', '備註', '採購總價'
+        ]);
+      }
 
-    for (var i = 0; i < formDataArray.length; i++) {
-      var fd = formDataArray[i];
-      rowsToInsert.push([
-        now,
-        fd.chineseName || '',
-        fd.englishName || '',
-        fd.quantity || '',
-        fd.category || '',
-        fd.concentration || '',
-        fd.usageTime || '',
-        fd.subject || '',
-        applicant,
-        email,
-        photoUrl,
-        fd.volume || '',
-        '', // 是否請購
-        fd.remark || '',
-        ''  // 採購總價
-      ]);
+      // 依「欄位名稱」對應，避免試算表欄位順序變動造成錯位
+      var headers = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
+      var rowsToInsert = [];
+      var now = new Date();
+
+      for (var j = 0; j < formDataArray.length; j++) {
+        var fd = formDataArray[j];
+        var rowDataMap = {
+          '時間戳記': now,
+          '物品/藥品中文名稱': fd.chineseName || '',
+          '藥品英文名稱(含化學式，分子量)或物品名稱': fd.englishName || '',
+          '所需數量': fd.quantity + (fd.unit ? ' ' + fd.unit : ''),
+          '物品分類/化學藥品狀態': fd.category || '',
+          '藥品濃度(液態)': fd.concentration || '無',
+          '課程使用時間': fd.usageTime || '',
+          '請勾選所需科別': fd.subject || '',
+          '申請人': applicant,
+          '電子郵件地址': email,
+          '物品/藥品照片': (fd.photoUrl && fd.photoUrl !== '無照片') ? fd.photoUrl : '無照片',
+          '藥品容量(液態)': fd.volume || '無',
+          '是否請購': '未請購',
+          '備註': fd.remark || '',
+          '採購總價': ''
+        };
+        var newRow = new Array(headers.length);
+        for (var h = 0; h < headers.length; h++) {
+          newRow[h] = rowDataMap.hasOwnProperty(headers[h]) ? rowDataMap[headers[h]] : '';
+        }
+        rowsToInsert.push(newRow);
+      }
+
+      if (rowsToInsert.length > 0) {
+        var lastRow = sheet.getLastRow();
+        sheet.getRange(lastRow + 1, 1, rowsToInsert.length, headers.length).setValues(rowsToInsert);
+      }
+      rowCount = rowsToInsert.length;
+
+      removeCachedData('sheet_data_cache_v2_chem');
+    } finally {
+      lock.releaseLock();
     }
 
-    if (rowsToInsert.length > 0) {
-      var lastRow = sheet.getLastRow();
-      sheet.getRange(lastRow + 1, 1, rowsToInsert.length, rowsToInsert[0].length).setValues(rowsToInsert);
+    // 發送一封彙整 Email 通知管理者
+    try {
+      var lines = [];
+      for (var k = 0; k < formDataArray.length; k++) {
+        var it = formDataArray[k];
+        lines.push((k + 1) + '. ' + it.chineseName + '｜' + it.quantity + (it.unit ? ' ' + it.unit : '') + '｜' + it.subject + (it.photoUrl && it.photoUrl !== '無照片' ? '｜有照片' : ''));
+      }
+      var bodyStr = '系統收到申請人 ' + applicant + ' 批次匯入的 ' + rowCount + ' 筆藥品/物品採購申請：\n\n' +
+        lines.join('\n') + '\n\n請登入系統管理者後台查看詳細內容並進行審核： ' + ADMIN_BACKEND_URL;
+      var htmlBodyStr = '系統收到申請人 <b>' + applicant + '</b> 批次匯入的 <b>' + rowCount + '</b> 筆藥品/物品採購申請：<br><br>' +
+        lines.join('<br>') + '<br><br>請 <a href=\'' + ADMIN_BACKEND_URL + '\'>登入系統管理者後台</a> 查看詳細內容並進行審核。';
+      MailApp.sendEmail(ADMIN_EMAILS.join(','), '【批次採購申請通知】' + applicant + ' 匯入 ' + rowCount + ' 筆', bodyStr, {
+        htmlBody: htmlBodyStr,
+        name: '自然科採購系統'
+      });
+    } catch (mailErr) {
+      console.log('Email發送失敗: ' + mailErr.toString());
+      return { success: true, message: '成功匯入 ' + rowCount + ' 筆請購資料！(但Email通知發送失敗：' + mailErr.toString() + ')' };
     }
 
-    return { success: true, message: '成功匯入 ' + rowsToInsert.length + ' 筆請購資料！' };
+    return { success: true, message: '成功匯入 ' + rowCount + ' 筆請購資料！' };
   } catch (e) {
     throw new Error('批次送出失敗: ' + e.message);
   }
@@ -820,7 +971,8 @@ function batchUpdateProcurementStatus(updates, token, system) {
 
     var sheet = getSystemSheet_(system);
 
-    var headers = sheet.getRange(1, 1, 1, Math.max(15, sheet.getLastColumn())).getValues()[0];
+    var rawHeaders = sheet.getRange(1, 1, 1, Math.max(15, sheet.getLastColumn())).getValues()[0];
+    var headers = rawHeaders.map(function (h) { return String(h).trim(); });
 
     // 對應可能為「是否請購」、「是否購入」或「是否歸還」
     var statusColIdx = headers.indexOf('是否請購');
@@ -868,7 +1020,7 @@ function deleteUserRequests(rowNumbers, token, system) {
     var data = sheet.getDataRange().getValues();
     if (data.length <= 1) return { success: false, message: '找不到資料表內容。' };
 
-    var headers = data[0];
+    var headers = data[0].map(function (h) { return String(h).trim(); });
     var emailColIdx = headers.indexOf('電子郵件地址');
     if (emailColIdx === -1) emailColIdx = headers.indexOf('電子郵件');
     if (emailColIdx === -1) emailColIdx = headers.indexOf('email');
@@ -965,9 +1117,9 @@ function getSystemSheet_(system) {
 function batchDeleteRows_(sheet, rowNumbers) {
   if (!rowNumbers || rowNumbers.length === 0) return;
   // 去重複並由大到小排序 (由下往上刪除才不會影響未處理的列號)
-  var uniqueRows = rowNumbers.filter(function(item, pos) {
+  var uniqueRows = rowNumbers.filter(function (item, pos) {
     return rowNumbers.indexOf(item) === pos;
-  }).sort(function(a, b) { return b - a; });
+  }).sort(function (a, b) { return b - a; });
 
   // 放棄使用 sheet.deleteRows(start, count)，改用逐列刪除確保 100% 成功率與穩定性
   for (var i = 0; i < uniqueRows.length; i++) {
@@ -1365,92 +1517,101 @@ function submitLabBooking(data, token) {
       try { email = Session.getActiveUser().getEmail(); } catch (e) { }
     }
 
-    // 準備要預約的日期陣列
-    let datesToBook = [];
-    let startD = new Date(data['使用日期']);
-    datesToBook.push(startD);
+    var lock = LockService.getScriptLock();
+    if (!lock.tryLock(15000)) {
+      return { success: false, message: '提交失敗：系統目前忙碌中，請稍後再試。' };
+    }
 
-    let isRecurring = data.isRecurring === true || data.isRecurring === 'true';
-    let endDateStr = data.endDate;
-    if (isRecurring && endDateStr) {
-      let endD = new Date(endDateStr);
-      let nextD = new Date(startD);
-      nextD.setDate(nextD.getDate() + 7);
-      while (nextD <= endD) {
-        datesToBook.push(new Date(nextD));
+    try {
+      // 準備要預約的日期陣列
+      let datesToBook = [];
+      let startD = new Date(data['使用日期']);
+      datesToBook.push(startD);
+
+      let isRecurring = data.isRecurring === true || data.isRecurring === 'true';
+      let endDateStr = data.endDate;
+      if (isRecurring && endDateStr) {
+        let endD = new Date(endDateStr);
+        let nextD = new Date(startD);
         nextD.setDate(nextD.getDate() + 7);
-      }
-    }
-
-    // 取得現有預約資料進行防衝堂檢查
-    const existingData = sheet.getDataRange().getValues();
-    // 取出所有現存預約的 (日期_實驗室_節次) 作為 Set
-    const bookedSet = new Set();
-    for (let i = 1; i < existingData.length; i++) {
-      let r = existingData[i];
-      if (!r[0]) continue; // 空列
-      let rDateStr = formatLabDate_(r[4], ss.getSpreadsheetTimeZone());
-      let rPeriods = String(r[5]).split(',').map(function (s) { return s.trim(); });
-      let rRoom = String(r[6]).trim();
-      rPeriods.forEach(function (p) {
-        if (p) bookedSet.add(rDateStr + "_" + rRoom + "_" + p);
-      });
-    }
-
-    const requestedPeriods = (data['使用節次'] || '').split(',').map(function (s) { return s.trim(); });
-    const reqRoom = String(data['使用實驗室'] || '').trim();
-    let conflicts = [];
-    let groupId = isRecurring ? Utilities.getUuid() : '';
-
-    let rowsToInsert = [];
-
-    // 逐一檢查每一個欲預約的日期與節次
-    for (let i = 0; i < datesToBook.length; i++) {
-      let curD = datesToBook[i];
-      let curDateStr = Utilities.formatDate(curD, ss.getSpreadsheetTimeZone(), "yyyy-MM-dd");
-      let validPeriods = [];
-
-      requestedPeriods.forEach(function (p) {
-        if (!p) return;
-        let key = curDateStr + "_" + reqRoom + "_" + p;
-        if (bookedSet.has(key)) {
-          conflicts.push({ date: curDateStr, period: p });
-        } else {
-          validPeriods.push(p);
+        while (nextD <= endD) {
+          datesToBook.push(new Date(nextD));
+          nextD.setDate(nextD.getDate() + 7);
         }
-      });
-
-      // 只有當該日期有未衝堂的節次時，才寫入一筆
-      if (validPeriods.length > 0) {
-        const row = [
-          new Date(),
-          email,
-          data['使用班級'] || '',
-          data['申請教師'] || '',
-          curD,
-          validPeriods.join(','),
-          data['使用實驗室'] || '',
-          data['實驗名稱/課程內容'] || '',
-          data['實驗所需化學藥品'] || '',
-          data['實驗所需器材'] || '',
-          data['使用型態'] || '',
-          data['人數'] || '',
-          data['申請學生'] || '',
-          '', // 第14欄預留
-          groupId // 第15欄: groupId
-        ];
-        rowsToInsert.push(row);
       }
+
+      // 取得現有預約資料進行防衝堂檢查
+      const existingData = sheet.getDataRange().getValues();
+      // 取出所有現存預約的 (日期_實驗室_節次) 作為 Set
+      const bookedSet = new Set();
+      for (let i = 1; i < existingData.length; i++) {
+        let r = existingData[i];
+        if (!r[0]) continue; // 空列
+        let rDateStr = formatLabDate_(r[4], ss.getSpreadsheetTimeZone());
+        let rPeriods = String(r[5]).split(',').map(function (s) { return s.trim(); });
+        let rRoom = String(r[6]).trim();
+        rPeriods.forEach(function (p) {
+          if (p) bookedSet.add(rDateStr + "_" + rRoom + "_" + p);
+        });
+      }
+
+      const requestedPeriods = (data['使用節次'] || '').split(',').map(function (s) { return s.trim(); });
+      const reqRoom = String(data['使用實驗室'] || '').trim();
+      let conflicts = [];
+      let groupId = isRecurring ? Utilities.getUuid() : '';
+
+      let rowsToInsert = [];
+
+      // 逐一檢查每一個欲預約的日期與節次
+      for (let i = 0; i < datesToBook.length; i++) {
+        let curD = datesToBook[i];
+        let curDateStr = Utilities.formatDate(curD, ss.getSpreadsheetTimeZone(), "yyyy-MM-dd");
+        let validPeriods = [];
+
+        requestedPeriods.forEach(function (p) {
+          if (!p) return;
+          let key = curDateStr + "_" + reqRoom + "_" + p;
+          if (bookedSet.has(key)) {
+            conflicts.push({ date: curDateStr, period: p });
+          } else {
+            validPeriods.push(p);
+          }
+        });
+
+        // 只有當該日期有未衝堂的節次時，才寫入一筆
+        if (validPeriods.length > 0) {
+          const row = [
+            new Date(),
+            email,
+            data['使用班級'] || '',
+            data['申請教師'] || '',
+            curD,
+            validPeriods.join(','),
+            data['使用實驗室'] || '',
+            data['實驗名稱/課程內容'] || '',
+            data['實驗所需化學藥品'] || '',
+            data['實驗所需器材'] || '',
+            data['使用型態'] || '',
+            data['人數'] || '',
+            data['申請學生'] || '',
+            '', // 第14欄預留
+            groupId // 第15欄: groupId
+          ];
+          rowsToInsert.push(row);
+        }
+      }
+
+      if (rowsToInsert.length > 0) {
+        let lastRow = sheet.getLastRow();
+        sheet.getRange(lastRow + 1, 1, rowsToInsert.length, rowsToInsert[0].length).setValues(rowsToInsert);
+      }
+
+      removeCachedData('sheet_data_cache_v2_lab');
+
+      return { success: true, conflicts: conflicts };
+    } finally {
+      lock.releaseLock();
     }
-
-    if (rowsToInsert.length > 0) {
-      let lastRow = sheet.getLastRow();
-      sheet.getRange(lastRow + 1, 1, rowsToInsert.length, rowsToInsert[0].length).setValues(rowsToInsert);
-    }
-
-    removeCachedData('sheet_data_cache_v2_lab');
-
-    return { success: true, conflicts: conflicts };
   } catch (e) {
     throw new Error('送出預約失敗: ' + e.message);
   }
@@ -1500,7 +1661,7 @@ function cancelLabBooking(rowNumber, token, cancelSeries) {
     var groupId = String(row[14] || '').trim();
     // 確保 cancelSeries 變數能正確被判定為 true (防範字串傳遞)
     var isCancelSeries = (cancelSeries === true || String(cancelSeries) === 'true');
-    
+
     if (isCancelSeries && groupId) {
       // 找出同 groupId 的所有列 (從後面刪除以避免列號偏移)
       var rowsToDelete = [];
@@ -1514,7 +1675,7 @@ function cancelLabBooking(rowNumber, token, cancelSeries) {
           }
         }
       }
-      
+
       if (rowsToDelete.length > 0) {
         batchDeleteRows_(sheet, rowsToDelete);
       } else {
@@ -1524,7 +1685,7 @@ function cancelLabBooking(rowNumber, token, cancelSeries) {
     } else {
       sheet.deleteRow(rowNumber);
     }
-    
+
     // 清除快取，讓下次讀取能抓到最新資料 (解決前端重新整理仍看到舊資料的問題)
     removeCachedData('sheet_data_cache_v2_lab');
     return { success: true };
@@ -1583,7 +1744,7 @@ function getCachedData(key) {
   var cache = CacheService.getScriptCache();
   var numChunksStr = cache.get(key + '_chunks');
   if (!numChunksStr) return null; // 完全沒命中
-  
+
   var numChunks = parseInt(numChunksStr, 10);
   if (numChunks === 1) {
     return cache.get(key);
@@ -1607,7 +1768,7 @@ function removeCachedData(key) {
   var cache = CacheService.getScriptCache();
   var numChunksStr = cache.get(key + '_chunks');
   var keysToRemove = [key, key + '_chunks'];
-  
+
   if (numChunksStr) {
     var numChunks = parseInt(numChunksStr, 10);
     for (var i = 0; i < numChunks; i++) {
@@ -1616,7 +1777,7 @@ function removeCachedData(key) {
   }
   // 為保險起見，也把可能產生的前 10 個 chunk 都刪除，防止舊有結構殘留
   for (var k = 0; k < 10; k++) {
-      keysToRemove.push(key + '_' + k);
+    keysToRemove.push(key + '_' + k);
   }
   cache.removeAll(keysToRemove);
 }

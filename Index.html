@@ -287,6 +287,9 @@
   <!-- 實驗室與預約 UI 前端渲染共用樣板元件 -->
   <?!= include('IndexComponentLabTemplates'); ?>
 
+  <!-- 藥品/物品 匯入核查頁 (獨立元件，自帶樣式) -->
+  <?!= include('IndexComponentChemImportReview'); ?>
+
   <!-- ==========================================
        JS 模組載入（依賴順序：Core → Widgets → Auth → Forms → Admin → Lab）
        每個模組職責清晰，由 js-main.html 拆分而來
@@ -308,6 +311,9 @@
 
   <!-- Layer 4: 申請表單（藥品/設備/借用 三大表單提交、圖片上傳） -->
   <?!= include('js-forms'); ?>
+
+  <!-- Layer 4.5: 藥品/物品匯入核查頁（需在 js-forms 之後載入；未載入時匯入會回退舊流程） -->
+  <?!= include('js-chem-import'); ?>
 
   <!-- Layer 5: 管理功能（清單渲染、批次更新、匯出、系統設定、Logo 上傳） -->
   <?!= include('js-admin'); ?>

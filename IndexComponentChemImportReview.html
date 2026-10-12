@@ -1,0 +1,166 @@
+<!-- ==========================================
+     藥品/物品 匯入核查頁 (獨立元件)
+     - 邏輯位於 js-chem-import.html (window.ChemImportReview)
+     - 所有 class 皆以 cr- 為前綴、自帶 style，不依賴也不修改 Stylesheet.html (Tailwind 編譯檔)
+     - 所有 id 皆以 cr- 為前綴，避免與既有表單 id 衝突
+     ========================================== -->
+<style>
+  .cr-overlay { position: fixed; inset: 0; z-index: 150; background: rgba(15, 23, 42, .55); backdrop-filter: blur(3px); display: flex; align-items: stretch; justify-content: center; padding: 12px; font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif; }
+  .cr-overlay[hidden] { display: none !important; }
+  .cr-panel { background: #f8fafc; width: 100%; max-width: 1100px; border-radius: 16px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, .35); display: flex; flex-direction: column; overflow: hidden; border: 1px solid #e2e8f0; }
+  .cr-head { padding: 16px 20px; background: #fff; border-bottom: 1px solid #e2e8f0; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+  .cr-title { font-size: 1.15rem; font-weight: 700; color: #0f172a; margin: 0; }
+  .cr-sub { font-size: .8rem; color: #64748b; margin-top: 2px; }
+  .cr-stats { display: flex; gap: 8px; flex-wrap: wrap; font-size: .8rem; }
+  .cr-chip { padding: 3px 10px; border-radius: 999px; background: #e0e7ff; color: #3730a3; font-weight: 600; }
+  .cr-chip.cr-chip-bad { background: #ffe4e6; color: #9f1239; }
+  .cr-chip.cr-chip-ok { background: #d1fae5; color: #065f46; }
+  .cr-body { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 14px; }
+  .cr-empty { text-align: center; color: #94a3b8; padding: 40px 0; }
+  .cr-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; display: grid; grid-template-columns: 1fr; gap: 12px; box-shadow: 0 1px 2px rgba(0, 0, 0, .04); transition: border-color .15s, box-shadow .15s; }
+  .cr-card.cr-card-bad { border-color: #fb7185; box-shadow: 0 0 0 2px rgba(251, 113, 133, .15); }
+  .cr-card.cr-card-active { border-color: #60a5fa; }
+  @media (min-width: 820px) { .cr-card { grid-template-columns: 1fr 240px; } }
+  .cr-card-top { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; }
+  .cr-index { font-weight: 700; color: #334155; font-size: .9rem; }
+  .cr-del { border: 0; background: #fff1f2; color: #be123c; border-radius: 8px; padding: 4px 10px; font-size: .78rem; cursor: pointer; }
+  .cr-del:hover { background: #ffe4e6; }
+  .cr-fields { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .cr-field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .cr-field.cr-wide { grid-column: 1 / -1; }
+  .cr-field[hidden] { display: none; }
+  .cr-label { font-size: .75rem; font-weight: 600; color: #475569; }
+  .cr-req { color: #e11d48; }
+  .cr-input { width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 9px; font-size: .88rem; background: #fff; color: #0f172a; box-sizing: border-box; font-family: inherit; }
+  .cr-input:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59, 130, 246, .2); }
+  .cr-input.cr-invalid { border-color: #f43f5e; background: #fff1f2; }
+  .cr-err { font-size: .72rem; color: #e11d48; min-height: 0; }
+  .cr-errbox { grid-column: 1 / -1; font-size: .8rem; color: #9f1239; background: #fff1f2; border: 1px solid #fecdd3; border-radius: 8px; padding: 6px 10px; }
+  .cr-errbox[hidden] { display: none; }
+  .cr-note { grid-column: 1 / -1; font-size: .75rem; color: #92400e; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 4px 10px; }
+  .cr-note[hidden] { display: none; }
+  .cr-photo { border: 2px dashed #cbd5e1; border-radius: 10px; padding: 10px; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 150px; cursor: pointer; font-size: .78rem; color: #64748b; transition: background .15s, border-color .15s; outline: none; }
+  .cr-photo:hover, .cr-photo:focus { background: #f1f5f9; border-color: #60a5fa; }
+  .cr-photo.cr-drag { background: #eff6ff; border-color: #3b82f6; }
+  .cr-photo-icon { font-size: 1.6rem; color: #94a3b8; }
+  .cr-thumb { max-width: 100%; max-height: 110px; object-fit: contain; border-radius: 6px; border: 1px solid #e2e8f0; }
+  .cr-photo-meta { font-size: .72rem; color: #64748b; word-break: break-all; }
+  .cr-photo-state { font-size: .72rem; font-weight: 600; }
+  .cr-photo-state.cr-ok { color: #059669; }
+  .cr-photo-state.cr-fail { color: #e11d48; }
+  .cr-photo-state.cr-busy { color: #2563eb; }
+  .cr-photo-rm { border: 0; background: #f1f5f9; border-radius: 6px; padding: 2px 8px; font-size: .72rem; color: #475569; cursor: pointer; }
+  .cr-photo-rm:hover { background: #e2e8f0; }
+  .cr-foot { padding: 12px 20px; background: #fff; border-top: 1px solid #e2e8f0; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
+  .cr-progress { flex: 1; min-width: 180px; }
+  .cr-progress[hidden] { display: none; }
+  .cr-progress-text { font-size: .78rem; color: #475569; margin-bottom: 3px; }
+  .cr-bar { height: 6px; background: #e2e8f0; border-radius: 999px; overflow: hidden; }
+  .cr-bar-in { height: 100%; width: 0; background: linear-gradient(90deg, #3b82f6, #6366f1); transition: width .2s; }
+  .cr-actions { display: flex; gap: 10px; margin-left: auto; }
+  .cr-btn { border-radius: 10px; padding: 8px 18px; font-size: .9rem; font-weight: 600; cursor: pointer; border: 1px solid #cbd5e1; background: #fff; color: #334155; font-family: inherit; }
+  .cr-btn:hover:not(:disabled) { background: #f1f5f9; }
+  .cr-btn-primary { background: #2563eb; border-color: #2563eb; color: #fff; }
+  .cr-btn-primary:hover:not(:disabled) { background: #1d4ed8; }
+  .cr-btn:disabled { opacity: .55; cursor: not-allowed; }
+</style>
+
+<div id="cr-overlay" class="cr-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="cr-title">
+  <div class="cr-panel">
+    <div class="cr-head">
+      <div>
+        <h2 id="cr-title" class="cr-title">匯入資料核查</h2>
+        <div class="cr-sub">請確認每筆資料正確，並可為每個藥品/物品上傳 1 張照片（圖片超過 500KB 會自動壓縮）。</div>
+      </div>
+      <div class="cr-stats">
+        <span id="cr-stat-total" class="cr-chip">共 0 筆</span>
+        <span id="cr-stat-bad" class="cr-chip cr-chip-ok">無錯誤</span>
+        <span id="cr-stat-photo" class="cr-chip">照片 0</span>
+      </div>
+    </div>
+
+    <div id="cr-body" class="cr-body"></div>
+
+    <div class="cr-foot">
+      <div id="cr-progress" class="cr-progress" hidden>
+        <div id="cr-progress-text" class="cr-progress-text"></div>
+        <div class="cr-bar"><div id="cr-bar-in" class="cr-bar-in"></div></div>
+      </div>
+      <div class="cr-actions">
+        <button type="button" id="cr-btn-cancel" class="cr-btn">取消匯入</button>
+        <button type="button" id="cr-btn-submit" class="cr-btn cr-btn-primary">確認送出</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 單筆資料卡片模板：由 js-chem-import.html 複製後以 DOM API 填值 (避免 innerHTML 注入) -->
+<template id="cr-row-template">
+  <div class="cr-card">
+    <div class="cr-card-top">
+      <span class="cr-index"></span>
+      <button type="button" class="cr-del" data-act="delete">刪除此筆</button>
+    </div>
+    <div class="cr-fields">
+      <div class="cr-field cr-wide">
+        <label class="cr-label">物品/藥品中文名稱 <span class="cr-req">*</span></label>
+        <input type="text" class="cr-input" data-f="chineseName">
+      </div>
+      <div class="cr-field cr-wide">
+        <label class="cr-label">藥品英文名稱 (含化學式、分子量)</label>
+        <input type="text" class="cr-input" data-f="englishName">
+      </div>
+      <div class="cr-field">
+        <label class="cr-label">所需數量 <span class="cr-req">*</span></label>
+        <input type="text" inputmode="decimal" class="cr-input" data-f="quantity">
+      </div>
+      <div class="cr-field">
+        <label class="cr-label">單位 <span class="cr-req">*</span></label>
+        <input type="text" class="cr-input" data-f="unit" placeholder="例如：瓶、包、公克">
+      </div>
+      <div class="cr-field">
+        <label class="cr-label">物品分類/狀態 <span class="cr-req">*</span></label>
+        <select class="cr-input" data-f="category"></select>
+      </div>
+      <div class="cr-field" data-show="other" hidden>
+        <label class="cr-label">自定義分類/狀態 <span class="cr-req">*</span></label>
+        <input type="text" class="cr-input" data-f="otherCategory">
+      </div>
+      <div class="cr-field" data-show="liquid" hidden>
+        <label class="cr-label">藥品濃度 (液態) <span class="cr-req">*</span></label>
+        <input type="text" class="cr-input" data-f="concentration" placeholder="例如：12 M 或 35%">
+      </div>
+      <div class="cr-field" data-show="liquid" hidden>
+        <label class="cr-label">藥品容量 (液態) <span class="cr-req">*</span></label>
+        <input type="text" class="cr-input" data-f="volume" placeholder="例如：500 mL">
+      </div>
+      <div class="cr-field">
+        <label class="cr-label">課程使用時間 <span class="cr-req">*</span></label>
+        <input type="text" class="cr-input" data-f="usageTime" placeholder="例如：2026/07/24">
+      </div>
+      <div class="cr-field">
+        <label class="cr-label">所需科別 <span class="cr-req">*</span></label>
+        <select class="cr-input" data-f="subject"></select>
+      </div>
+      <div class="cr-field cr-wide">
+        <label class="cr-label">備註</label>
+        <textarea rows="2" class="cr-input" data-f="remark"></textarea>
+      </div>
+      <div class="cr-note" data-role="note" hidden></div>
+      <div class="cr-errbox" data-role="errbox" hidden></div>
+    </div>
+    <div class="cr-photo" data-role="photo" tabindex="0" title="點擊選擇、拖放，或聚焦後 Ctrl+V 貼上圖片">
+      <input type="file" accept="image/*" style="display:none" data-role="file">
+      <div data-role="photo-empty">
+        <div class="cr-photo-icon"><i class="fa-regular fa-image"></i></div>
+        <div>點擊選擇照片<br>或拖放 / Ctrl+V 貼上</div>
+      </div>
+      <div data-role="photo-view" style="display:none;flex-direction:column;align-items:center;gap:4px;width:100%">
+        <img class="cr-thumb" alt="照片預覽" data-role="thumb">
+        <div class="cr-photo-meta" data-role="meta"></div>
+        <div class="cr-photo-state" data-role="state"></div>
+        <button type="button" class="cr-photo-rm" data-act="remove-photo">移除照片</button>
+      </div>
+    </div>
+  </div>
+</template>

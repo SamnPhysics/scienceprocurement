@@ -1,0 +1,690 @@
+<script>
+  // ==========================================
+  // Module: js-chem-import.html
+  // Responsibility: 藥品/物品 Excel 匯入「核查頁」邏輯：渲染可編輯清單、欄位驗證、
+  //                 每筆 1 張圖片 (800px / 500KB 規則壓縮)、逐張上傳、批次寫入。
+  // Dependencies: js-core.html (ApiService, AppState, DOM 以外之 getToken/SystemCache),
+  //               js-ui-utility.html (alert/showConfirm), js-forms.html (呼叫 open)
+  //               IndexComponentChemImportReview.html (HTML 骨架)
+  // Exports: window.ChemImportReview { open, close }
+  // 注意：本檔刻意不使用反引號模板字串，避免 GAS HTML 壓縮器誤判 // 為註解。
+  // ==========================================
+  (function () {
+    var MAX_SIDE = 800;                 // 與單筆表單一致
+    var SIZE_LIMIT = 500 * 1024;        // 500KB 界線
+    var MAX_RAW_BYTES = 20 * 1024 * 1024; // 原始檔上限，避免瀏覽器記憶體問題
+    var UPLOAD_CONCURRENCY = 3;
+    var KEEP_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+
+    var SUBJECTS = ['物理', '化學', '生物', '地科', '自然學科探究實作課程', '自然學科四科專題課程'];
+    var CATEGORIES = [
+      { value: '固態藥品', label: '固態藥品 (粉/顆粒)' },
+      { value: '液態藥品', label: '液態藥品' },
+      { value: '肉類內臟', label: '肉類內臟' },
+      { value: '蔬菜水果', label: '蔬菜水果' },
+      { value: '活體', label: '活體(如青蛙)' },
+      { value: '實驗器材', label: '實驗器材(耗材)' },
+      { value: '其他', label: '其他' }
+    ];
+
+    var rows = [];        // 每筆: { id, data, photo, el }
+    var seq = 0;
+    var busy = false;
+    var activeCard = null;
+    var els = {};
+
+    function $(id) { return document.getElementById(id); }
+
+    function cacheEls() {
+      els.overlay = $('cr-overlay');
+      els.body = $('cr-body');
+      els.tpl = $('cr-row-template');
+      els.statTotal = $('cr-stat-total');
+      els.statBad = $('cr-stat-bad');
+      els.statPhoto = $('cr-stat-photo');
+      els.progress = $('cr-progress');
+      els.progressText = $('cr-progress-text');
+      els.bar = $('cr-bar-in');
+      els.btnCancel = $('cr-btn-cancel');
+      els.btnSubmit = $('cr-btn-submit');
+      return !!(els.overlay && els.body && els.tpl);
+    }
+
+    // ---------- 資料正規化 ----------
+    function normalizeCategory(cat) {
+      var c = String(cat || '').trim();
+      if (!c) return { category: '', other: '' };
+      if (c.indexOf('固態') === 0) return { category: '固態藥品', other: '' };
+      if (c.indexOf('液態') === 0) return { category: '液態藥品', other: '' };
+      if (c.indexOf('活體') === 0) return { category: '活體', other: '' };
+      if (c.indexOf('實驗器材') === 0) return { category: '實驗器材', other: '' };
+      for (var i = 0; i < CATEGORIES.length; i++) {
+        if (CATEGORIES[i].value === c) return { category: c, other: '' };
+      }
+      return { category: '其他', other: c };
+    }
+
+    // 「3 瓶」→ 數量 3 / 單位 瓶
+    function splitQuantity(qtyStr, unitStr) {
+      var qty = String(qtyStr || '').trim();
+      var unit = String(unitStr || '').trim();
+      var m = qty.match(/^(\d+(?:\.\d+)?)\s*(.*)$/);
+      var split = false;
+      if (m) {
+        qty = m[1];
+        if (!unit && m[2].trim()) { unit = m[2].trim(); split = true; }
+      }
+      return { quantity: qty, unit: unit, split: split };
+    }
+
+    function buildRowData(src) {
+      var q = splitQuantity(src.quantity, src.unit);
+      var c = normalizeCategory(src.category);
+      var notes = [];
+      if (q.split) notes.push('已自動將「' + String(src.quantity).trim() + '」拆成數量 ' + q.quantity + ' 與單位「' + q.unit + '」');
+      if (c.category && String(src.category).trim() !== c.category && c.category !== '其他') {
+        notes.push('分類「' + String(src.category).trim() + '」已對應為「' + c.category + '」');
+      }
+      if (c.category === '其他' && c.other) notes.push('分類「' + c.other + '」不在預設選項，已歸入「其他」');
+      var subject = String(src.subject || '').trim();
+      return {
+        data: {
+          chineseName: String(src.chineseName || '').trim(),
+          englishName: String(src.englishName || '').trim(),
+          quantity: q.quantity,
+          unit: q.unit,
+          category: c.category,
+          otherCategory: c.other,
+          concentration: String(src.concentration || '').trim(),
+          volume: String(src.volume || '').trim(),
+          usageTime: String(src.usageTime || '').trim(),
+          subject: subject,
+          remark: String(src.remark || '').trim()
+        },
+        notes: notes
+      };
+    }
+
+    // ---------- 驗證 ----------
+    function validateData(d) {
+      var errs = {};
+      if (!d.chineseName) errs.chineseName = '請填寫中文名稱';
+      else if (d.chineseName.length > 100) errs.chineseName = '不可超過 100 字';
+      if (d.englishName.length > 100) errs.englishName = '不可超過 100 字';
+      if (!d.quantity) errs.quantity = '請填寫數量';
+      else if (isNaN(Number(d.quantity)) || Number(d.quantity) < 1) errs.quantity = '數量必須為 1 以上的數字';
+      if (!d.unit) errs.unit = '請填寫單位';
+      else if (d.unit.length > 20) errs.unit = '單位過長';
+      if (!d.category) errs.category = '請選擇分類';
+      if (d.category === '其他' && !d.otherCategory) errs.otherCategory = '請輸入自定義分類';
+      if (d.category === '液態藥品') {
+        if (!d.concentration) errs.concentration = '液態藥品需填濃度';
+        if (!d.volume) errs.volume = '液態藥品需填容量';
+      }
+      if (!d.usageTime) errs.usageTime = '請填寫使用時間';
+      if (SUBJECTS.indexOf(d.subject) === -1) errs.subject = d.subject ? '科別「' + d.subject + '」不在選項內' : '請選擇科別';
+      if (d.remark.length > 1000) errs.remark = '備註不可超過 1000 字';
+      return errs;
+    }
+
+    // ---------- 圖片壓縮 ----------
+    function loadBitmap(file) {
+      if (window.createImageBitmap) {
+        return createImageBitmap(file, { imageOrientation: 'from-image' }).catch(function () { return loadImageEl(file); });
+      }
+      return loadImageEl(file);
+    }
+
+    function loadImageEl(file) {
+      return new Promise(function (resolve, reject) {
+        var url = URL.createObjectURL(file);
+        var img = new Image();
+        img.onload = function () { URL.revokeObjectURL(url); resolve(img); };
+        img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('無法解析此圖片格式')); };
+        img.src = url;
+      });
+    }
+
+    function readAsDataUrl(blob) {
+      return new Promise(function (resolve, reject) {
+        var r = new FileReader();
+        r.onload = function () { resolve(r.result); };
+        r.onerror = function () { reject(new Error('讀取圖片失敗')); };
+        r.readAsDataURL(blob);
+      });
+    }
+
+    function canvasToBlob(canvas, quality) {
+      return new Promise(function (resolve, reject) {
+        canvas.toBlob(function (b) { b ? resolve(b) : reject(new Error('圖片壓縮失敗')); }, 'image/jpeg', quality);
+      });
+    }
+
+    /**
+     * 規則：長邊 > 800px 或 檔案 > 500KB 才壓縮 (縮至 800px、JPEG)；
+     *       否則且格式為 jpeg/png/webp 時保持原檔。
+     * @returns {Promise<{dataUrl:string,name:string,size:number,compressed:boolean,origSize:number}>}
+     */
+    function processImage(file) {
+      if (!file || !/^image\//.test(file.type)) return Promise.reject(new Error('請選擇圖片檔案'));
+      if (file.size > MAX_RAW_BYTES) return Promise.reject(new Error('圖片原始檔超過 20MB，請先縮小'));
+      return loadBitmap(file).then(function (bmp) {
+        var w = bmp.width, h = bmp.height;
+        var needResize = (w > MAX_SIDE || h > MAX_SIDE);
+        var typeOk = KEEP_TYPES.indexOf(file.type) !== -1;
+        if (!needResize && file.size <= SIZE_LIMIT && typeOk) {
+          if (bmp.close) bmp.close();
+          return readAsDataUrl(file).then(function (url) {
+            return { dataUrl: url, name: file.name || 'photo', size: file.size, compressed: false, origSize: file.size };
+          });
+        }
+        var nw = w, nh = h;
+        if (needResize) {
+          if (w >= h) { nh = Math.round(h * MAX_SIDE / w); nw = MAX_SIDE; }
+          else { nw = Math.round(w * MAX_SIDE / h); nh = MAX_SIDE; }
+        }
+        var canvas = document.createElement('canvas');
+        canvas.width = nw; canvas.height = nh;
+        var ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';            // 透明 PNG 轉 JPEG 時避免黑底
+        ctx.fillRect(0, 0, nw, nh);
+        ctx.drawImage(bmp, 0, 0, nw, nh);
+        if (bmp.close) bmp.close();
+        var qualities = [0.8, 0.7, 0.6, 0.5];
+        var idx = 0;
+        function attempt() {
+          return canvasToBlob(canvas, qualities[idx]).then(function (blob) {
+            if (blob.size > SIZE_LIMIT && idx < qualities.length - 1) { idx++; return attempt(); }
+            return readAsDataUrl(blob).then(function (url) {
+              var name = file.name || 'photo';
+              var dot = name.lastIndexOf('.');
+              name = (dot > 0 ? name.substring(0, dot) : name) + '.jpg';
+              return { dataUrl: url, name: name, size: blob.size, compressed: true, origSize: file.size };
+            });
+          });
+        }
+        return attempt();
+      });
+    }
+
+    function fmtSize(n) {
+      if (n >= 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + ' MB';
+      return Math.max(1, Math.round(n / 1024)) + ' KB';
+    }
+
+    // ---------- 渲染 ----------
+    function fillSelect(sel, items, withBlank) {
+      sel.innerHTML = '';
+      if (withBlank) {
+        var b = document.createElement('option');
+        b.value = ''; b.textContent = '請選擇';
+        sel.appendChild(b);
+      }
+      items.forEach(function (it) {
+        var o = document.createElement('option');
+        o.value = it.value; o.textContent = it.label;
+        sel.appendChild(o);
+      });
+    }
+
+    function createCard(row) {
+      var frag = els.tpl.content.cloneNode(true);
+      var card = frag.querySelector('.cr-card');
+      row.el = card;
+      var catSel = card.querySelector('[data-f="category"]');
+      fillSelect(catSel, CATEGORIES, true);
+      var subSel = card.querySelector('[data-f="subject"]');
+      var subItems = SUBJECTS.map(function (s) { return { value: s, label: s }; });
+      // 若匯入的科別不在選項內，仍保留一個選項以便使用者看到原值並被驗證標紅
+      if (row.data.subject && SUBJECTS.indexOf(row.data.subject) === -1) {
+        subItems.unshift({ value: row.data.subject, label: row.data.subject + '（無效）' });
+      }
+      fillSelect(subSel, subItems, true);
+
+      Object.keys(row.data).forEach(function (k) {
+        var f = card.querySelector('[data-f="' + k + '"]');
+        if (f) f.value = row.data[k];
+      });
+
+      if (row.notes && row.notes.length) {
+        var note = card.querySelector('[data-role="note"]');
+        note.textContent = row.notes.join('；');
+        note.hidden = false;
+      }
+      return card;
+    }
+
+    function renderAll() {
+      els.body.innerHTML = '';
+      if (rows.length === 0) {
+        var empty = document.createElement('div');
+        empty.className = 'cr-empty';
+        empty.textContent = '目前沒有資料，請按「取消匯入」後重新選擇檔案。';
+        els.body.appendChild(empty);
+      }
+      rows.forEach(function (row, i) {
+        els.body.appendChild(createCard(row));
+      });
+      refreshAll();
+    }
+
+    function refreshPhotoView(row) {
+      var card = row.el;
+      if (!card) return;
+      var empty = card.querySelector('[data-role="photo-empty"]');
+      var view = card.querySelector('[data-role="photo-view"]');
+      var p = row.photo;
+      if (!p) {
+        empty.style.display = '';
+        view.style.display = 'none';
+        return;
+      }
+      empty.style.display = 'none';
+      view.style.display = 'flex';
+      card.querySelector('[data-role="thumb"]').src = p.previewUrl;
+      card.querySelector('[data-role="meta"]').textContent =
+        p.name + '（' + (p.compressed ? '已壓縮 ' + fmtSize(p.origSize) + ' → ' + fmtSize(p.size) : fmtSize(p.size) + '，未壓縮') + '）';
+      var st = card.querySelector('[data-role="state"]');
+      st.className = 'cr-photo-state';
+      if (p.status === 'uploaded') { st.textContent = '已上傳'; st.classList.add('cr-ok'); }
+      else if (p.status === 'uploading') { st.textContent = '上傳中…'; st.classList.add('cr-busy'); }
+      else if (p.status === 'failed') { st.textContent = '上傳失敗：' + (p.error || ''); st.classList.add('cr-fail'); }
+      else if (p.status === 'processing') { st.textContent = '壓縮處理中…'; st.classList.add('cr-busy'); }
+      else { st.textContent = '待上傳'; }
+    }
+
+    function applyRowUi(row, errs, showErrors) {
+      var card = row.el;
+      if (!card) return;
+      var liquid = row.data.category === '液態藥品';
+      var other = row.data.category === '其他';
+      card.querySelectorAll('[data-show="liquid"]').forEach(function (n) { n.hidden = !liquid; });
+      card.querySelectorAll('[data-show="other"]').forEach(function (n) { n.hidden = !other; });
+      card.querySelector('.cr-index').textContent = '第 ' + (rows.indexOf(row) + 1) + ' 筆';
+
+      var msgs = [];
+      card.querySelectorAll('[data-f]').forEach(function (inp) {
+        var key = inp.getAttribute('data-f');
+        var bad = !!errs[key] && showErrors;
+        inp.classList.toggle('cr-invalid', bad);
+        if (errs[key]) msgs.push(errs[key]);
+      });
+      var box = card.querySelector('[data-role="errbox"]');
+      if (showErrors && msgs.length) { box.textContent = '請修正：' + msgs.join('；'); box.hidden = false; }
+      else { box.hidden = true; }
+      card.classList.toggle('cr-card-bad', showErrors && msgs.length > 0);
+    }
+
+    function refreshAll(showErrors) {
+      var bad = 0, photos = 0;
+      rows.forEach(function (row) {
+        var errs = validateData(row.data);
+        if (Object.keys(errs).length) bad++;
+        if (row.photo) photos++;
+        applyRowUi(row, errs, showErrors !== false && row.touched !== false && (showErrors === true || row.touched === true));
+        refreshPhotoView(row);
+      });
+      els.statTotal.textContent = '共 ' + rows.length + ' 筆';
+      els.statBad.textContent = bad ? (bad + ' 筆待修正') : '無錯誤';
+      els.statBad.className = 'cr-chip ' + (bad ? 'cr-chip-bad' : 'cr-chip-ok');
+      els.statPhoto.textContent = '照片 ' + photos;
+      els.btnSubmit.disabled = busy || rows.length === 0;
+    }
+
+    // ---------- 圖片指派 ----------
+    function releasePhoto(row) {
+      if (row.photo && row.photo.previewUrl) URL.revokeObjectURL(row.photo.previewUrl);
+      row.photo = null;
+    }
+
+    function attachPhoto(row, file) {
+      if (busy) return;
+      releasePhoto(row);
+      row.photo = { name: file.name || '貼上的圖片.png', status: 'processing', size: file.size, origSize: file.size, compressed: false, previewUrl: URL.createObjectURL(file) };
+      var token = row.photo;
+      refreshPhotoView(row);
+      processImage(file).then(function (res) {
+        if (row.photo !== token) return; // 已被替換或移除
+        token.dataUrl = res.dataUrl;
+        token.name = res.name;
+        token.size = res.size;
+        token.origSize = res.origSize;
+        token.compressed = res.compressed;
+        token.status = 'ready';
+        token.photoUrl = '';
+        refreshAll();
+      }).catch(function (err) {
+        if (row.photo !== token) return;
+        releasePhoto(row);
+        refreshAll();
+        alert('圖片處理失敗：' + (err && err.message ? err.message : err));
+      });
+    }
+
+    // ---------- 事件 ----------
+    function rowOfElement(node) {
+      var card = node && node.closest ? node.closest('.cr-card') : null;
+      if (!card) return null;
+      for (var i = 0; i < rows.length; i++) if (rows[i].el === card) return rows[i];
+      return null;
+    }
+
+    function onFieldInput(e) {
+      var f = e.target.getAttribute && e.target.getAttribute('data-f');
+      if (!f) return;
+      var row = rowOfElement(e.target);
+      if (!row) return;
+      row.data[f] = e.target.value;
+      row.touched = true;
+      if (f === 'category') {
+        if (row.data.category !== '液態藥品') { row.data.concentration = ''; row.data.volume = ''; setField(row, 'concentration', ''); setField(row, 'volume', ''); }
+        if (row.data.category !== '其他') { row.data.otherCategory = ''; setField(row, 'otherCategory', ''); }
+      }
+      var errs = validateData(row.data);
+      applyRowUi(row, errs, true);
+      updateStats();
+    }
+
+    function setField(row, key, val) {
+      var f = row.el.querySelector('[data-f="' + key + '"]');
+      if (f) f.value = val;
+    }
+
+    function updateStats() {
+      var bad = 0;
+      rows.forEach(function (r) { if (Object.keys(validateData(r.data)).length) bad++; });
+      els.statBad.textContent = bad ? (bad + ' 筆待修正') : '無錯誤';
+      els.statBad.className = 'cr-chip ' + (bad ? 'cr-chip-bad' : 'cr-chip-ok');
+    }
+
+    function onClick(e) {
+      var act = e.target.closest ? e.target.closest('[data-act]') : null;
+      var row = rowOfElement(e.target);
+      if (act && row) {
+        e.stopPropagation();
+        var a = act.getAttribute('data-act');
+        if (a === 'delete') {
+          if (busy) return;
+          releasePhoto(row);
+          rows.splice(rows.indexOf(row), 1);
+          if (row.el && row.el.parentNode) row.el.parentNode.removeChild(row.el);
+          if (rows.length === 0) renderAll(); else refreshAll();
+        } else if (a === 'remove-photo') {
+          if (busy) return;
+          releasePhoto(row);
+          refreshAll();
+        }
+        return;
+      }
+      var zone = e.target.closest ? e.target.closest('[data-role="photo"]') : null;
+      if (zone && row && !busy) {
+        zone.querySelector('[data-role="file"]').click();
+      }
+    }
+
+    function onFileChange(e) {
+      if (!e.target.matches || !e.target.matches('[data-role="file"]')) return;
+      var row = rowOfElement(e.target);
+      var file = e.target.files && e.target.files[0];
+      e.target.value = '';
+      if (row && file) attachPhoto(row, file);
+    }
+
+    function onDragOver(e) {
+      var zone = e.target.closest ? e.target.closest('[data-role="photo"]') : null;
+      if (!zone) return;
+      e.preventDefault();
+      zone.classList.add('cr-drag');
+    }
+    function onDragLeave(e) {
+      var zone = e.target.closest ? e.target.closest('[data-role="photo"]') : null;
+      if (zone) zone.classList.remove('cr-drag');
+    }
+    function onDrop(e) {
+      var zone = e.target.closest ? e.target.closest('[data-role="photo"]') : null;
+      if (!zone) return;
+      e.preventDefault();
+      zone.classList.remove('cr-drag');
+      var row = rowOfElement(zone);
+      var file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (!row || !file) return;
+      if (!/^image\//.test(file.type)) { alert('請上傳圖片格式的檔案！'); return; }
+      attachPhoto(row, file);
+    }
+
+    // 核查頁內的貼上事件：一律阻止冒泡，避免 js-forms 的全域貼上監聽把圖片塞進背景藥品表單
+    function onPaste(e) {
+      e.stopPropagation();
+      var items = (e.clipboardData && e.clipboardData.items) ? e.clipboardData.items : [];
+      for (var i = 0; i < items.length; i++) {
+        var it = items[i];
+        if (it.kind === 'file' && it.type.indexOf('image/') === 0) {
+          var row = rowOfElement(e.target) || activeCard;
+          if (!row) { alert('請先點選要貼上圖片的那一筆資料。'); e.preventDefault(); return; }
+          e.preventDefault();
+          if (!busy) attachPhoto(row, it.getAsFile());
+          return;
+        }
+      }
+    }
+
+    function onFocusIn(e) {
+      var row = rowOfElement(e.target);
+      if (row) {
+        activeCard = row;
+        rows.forEach(function (r) { if (r.el) r.el.classList.toggle('cr-card-active', r === row); });
+      }
+    }
+
+    function onBeforeUnload(e) {
+      if (!els.overlay.hidden) { e.preventDefault(); e.returnValue = ''; }
+    }
+
+    // ---------- 進度 / 上傳 / 送出 ----------
+    function setProgress(done, total, text) {
+      els.progress.hidden = false;
+      els.progressText.textContent = text;
+      els.bar.style.width = (total ? Math.round(done / total * 100) : 0) + '%';
+    }
+
+    function setBusy(v) {
+      busy = v;
+      els.btnSubmit.disabled = v || rows.length === 0;
+      els.btnCancel.disabled = v;
+      els.btnSubmit.textContent = v ? '處理中…' : '確認送出';
+      els.body.querySelectorAll('input,select,textarea,button').forEach(function (n) { n.disabled = v; });
+    }
+
+    function uploadOne(row) {
+      var p = row.photo;
+      p.status = 'uploading';
+      refreshPhotoView(row);
+      return ApiService.form.uploadChemImage(p.dataUrl, p.name, getToken()).then(function (res) {
+        if (res && res.success && res.photoUrl) {
+          p.photoUrl = res.photoUrl;
+          p.status = 'uploaded';
+        } else {
+          p.status = 'failed';
+          p.error = (res && res.message) || '未知錯誤';
+        }
+      }).catch(function (err) {
+        p.status = 'failed';
+        p.error = (err && err.message) || String(err);
+      }).then(function () { refreshPhotoView(row); });
+    }
+
+    function uploadAll(list, onStep) {
+      return new Promise(function (resolve) {
+        var idx = 0, done = 0;
+        if (list.length === 0) { resolve(); return; }
+        function next() {
+          if (idx >= list.length) return;
+          var row = list[idx++];
+          uploadOne(row).then(function () {
+            done++;
+            onStep(done);
+            if (done === list.length) resolve(); else next();
+          });
+        }
+        var n = Math.min(UPLOAD_CONCURRENCY, list.length);
+        for (var i = 0; i < n; i++) next();
+      });
+    }
+
+    function checkLogin() {
+      return ApiService.auth.getStatus(getToken()).then(function (st) {
+        return !!(st && st.loggedIn && st.role !== 'invalid' && st.role !== 'student' && st.role !== 'guest');
+      }).catch(function () { return false; });
+    }
+
+    function scrollToFirstBad() {
+      for (var i = 0; i < rows.length; i++) {
+        if (Object.keys(validateData(rows[i].data)).length) {
+          rows[i].el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          return;
+        }
+      }
+    }
+
+    function buildPayload() {
+      var applicantVal = AppState.currentUserDisplayName || (AppState.currentUserEmail ? AppState.currentUserEmail.split('@')[0] : '');
+      return rows.map(function (row) {
+        var d = row.data;
+        return {
+          applicant: applicantVal,
+          email: AppState.currentUserEmail,
+          chineseName: d.chineseName,
+          englishName: d.englishName,
+          quantity: d.quantity,
+          unit: d.unit,
+          category: d.category === '其他' ? d.otherCategory : d.category,
+          concentration: d.category === '液態藥品' ? d.concentration : '',
+          volume: d.category === '液態藥品' ? d.volume : '',
+          usageTime: d.usageTime,
+          subject: d.subject,
+          remark: d.remark,
+          photoUrl: (row.photo && row.photo.status === 'uploaded') ? row.photo.photoUrl : ''
+        };
+      });
+    }
+
+    function handleSubmit() {
+      if (busy) return;
+      refreshAll(true);
+      var anyBad = rows.some(function (r) { return Object.keys(validateData(r.data)).length > 0; });
+      if (anyBad) { alert('仍有資料欄位需要修正，請檢查標紅的項目。'); scrollToFirstBad(); return; }
+      if (rows.some(function (r) { return r.photo && r.photo.status === 'processing'; })) { alert('圖片仍在處理中，請稍候再送出。'); return; }
+
+      showConfirm('即將送出 ' + rows.length + ' 筆請購資料（其中 ' + rows.filter(function (r) { return r.photo; }).length + ' 筆含照片），確定嗎？').then(function (ok) {
+        if (!ok) return;
+        setBusy(true);
+        setProgress(0, 1, '檢查登入狀態…');
+        return checkLogin().then(function (loggedIn) {
+          if (!loggedIn) {
+            setBusy(false);
+            els.progress.hidden = true;
+            alert('登入已逾期或權限不足，請重新登入後再送出（您的核查資料會保留在此頁面）。');
+            return;
+          }
+          var toUpload = rows.filter(function (r) { return r.photo && r.photo.status !== 'uploaded'; });
+          var total = toUpload.length;
+          setProgress(0, total, total ? ('上傳圖片 0 / ' + total) : '準備寫入資料…');
+          return uploadAll(toUpload, function (done) {
+            setProgress(done, total, '上傳圖片 ' + done + ' / ' + total);
+          }).then(function () {
+            var failed = rows.filter(function (r) { return r.photo && r.photo.status === 'failed'; });
+            if (failed.length) {
+              setBusy(false);
+              els.progress.hidden = true;
+              refreshAll();
+              alert('有 ' + failed.length + ' 張圖片上傳失敗（已標示於該筆資料），請重新按「確認送出」重試，或移除該圖片。');
+              return;
+            }
+            setProgress(total, total || 1, '寫入資料中…');
+            return ApiService.form.batchSubmitChem(buildPayload(), getToken()).then(function (res) {
+              if (res && res.success) {
+                if (window.SystemCache) {
+                  window.SystemCache.invalidate('user_chem');
+                  window.SystemCache.invalidate('admin_chem');
+                }
+                setBusy(false);
+                closeInternal();
+                alert(res.message || '匯入成功！');
+                if (typeof refreshDatalist === 'function') refreshDatalist();
+              } else {
+                setBusy(false);
+                els.progress.hidden = true;
+                alert('批次送出失敗：' + ((res && res.message) || '未知錯誤'));
+              }
+            });
+          });
+        });
+      }).catch(function (err) {
+        setBusy(false);
+        els.progress.hidden = true;
+        alert('批次送出失敗：' + (err && err.message ? err.message : err));
+      });
+    }
+
+    function closeInternal() {
+      rows.forEach(releasePhoto);
+      rows = [];
+      activeCard = null;
+      els.body.innerHTML = '';
+      els.progress.hidden = true;
+      els.overlay.hidden = true;
+      document.body.style.overflow = '';
+    }
+
+    function handleCancel() {
+      if (busy) return;
+      showConfirm('確定要放棄這次匯入嗎？已編輯的內容與選擇的圖片都會被清除。').then(function (ok) {
+        if (ok) closeInternal();
+      });
+    }
+
+    var bound = false;
+    function bindOnce() {
+      if (bound) return;
+      bound = true;
+      els.body.addEventListener('input', onFieldInput);
+      els.body.addEventListener('change', onFieldInput);
+      els.body.addEventListener('change', onFileChange);
+      els.body.addEventListener('click', onClick);
+      els.body.addEventListener('dragover', onDragOver);
+      els.body.addEventListener('dragleave', onDragLeave);
+      els.body.addEventListener('drop', onDrop);
+      els.body.addEventListener('focusin', onFocusIn);
+      els.overlay.addEventListener('paste', onPaste);
+      els.btnSubmit.addEventListener('click', handleSubmit);
+      els.btnCancel.addEventListener('click', handleCancel);
+      window.addEventListener('beforeunload', onBeforeUnload);
+    }
+
+    /**
+     * 開啟核查頁
+     * @param {Array<Object>} importedRows - 由 handleChemImport 解析出的原始列資料
+     */
+    function open(importedRows) {
+      if (!cacheEls()) {
+        alert('核查頁元件載入失敗，請重新整理網頁後再試。');
+        return false;
+      }
+      bindOnce();
+      rows.forEach(releasePhoto);
+      rows = (importedRows || []).map(function (src) {
+        var built = buildRowData(src);
+        return { id: ++seq, data: built.data, notes: built.notes, photo: null, el: null, touched: true };
+      });
+      els.progress.hidden = true;
+      setBusy(false);
+      els.overlay.hidden = false;
+      document.body.style.overflow = 'hidden';
+      renderAll();
+      els.body.scrollTop = 0;
+      return true;
+    }
+
+    window.ChemImportReview = { open: open, close: closeInternal };
+  })();
+</script>
